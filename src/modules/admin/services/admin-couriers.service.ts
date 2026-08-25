@@ -8,7 +8,7 @@ export class AdminCouriersService {
   private readonly DEFAULT_COURIERS = [
     { name: "Steadfast", logo: "SC", color: "bg-emerald-600", defaultUptime: "99.9%", defaultLatency: 120 },
     { name: "Pathao", logo: "PC", color: "bg-indigo-600", defaultUptime: "99.8%", defaultLatency: 145 },
-    { name: "RedX", logo: "RX", color: "bg-red-600", defaultUptime: "98.7%", defaultLatency: 210 },
+    { name: "RedX", logo: "RX", color: "bg-rose-600", defaultUptime: "98.7%", defaultLatency: 210 },
     { name: "Paperfly", logo: "PF", color: "bg-amber-600", defaultUptime: "99.2%", defaultLatency: 160 },
     { name: "ParcelDex", logo: "PD", color: "bg-blue-600", defaultUptime: "99.5%", defaultLatency: 130 },
     { name: "CarryBee", logo: "CB", color: "bg-purple-600", defaultUptime: "99.1%", defaultLatency: 180 },
@@ -18,9 +18,17 @@ export class AdminCouriersService {
 
   async getCourierHealth() {
     for (const c of this.DEFAULT_COURIERS) {
+      const envKey = c.name === "Steadfast" ? process.env.STEADFAST_API_KEY : c.name === "Pathao" ? process.env.PATHAO_CLIENT_ID : c.name === "RedX" ? process.env.REDX_API_TOKEN : null;
+      const envSecret = c.name === "Steadfast" ? process.env.STEADFAST_SECRET_KEY : c.name === "Pathao" ? process.env.PATHAO_CLIENT_SECRET : null;
+
       await this.prisma.courierHealthMetric.upsert({
         where: { provider: c.name },
-        update: {},
+        update: {
+          logo: c.logo,
+          color: c.color,
+          ...(envKey ? { apiKey: envKey } : {}),
+          ...(envSecret ? { secretKey: envSecret } : {}),
+        },
         create: {
           provider: c.name,
           logo: c.logo,
@@ -29,29 +37,34 @@ export class AdminCouriersService {
           latencyMs: c.defaultLatency,
           status: CourierHealthStatus.OPERATIONAL,
           isCustom: false,
+          apiKey: envKey,
+          secretKey: envSecret,
         },
       });
     }
 
     const records = await this.prisma.courierHealthMetric.findMany({ orderBy: { provider: "asc" } });
-    return records.map((r) => ({
-      id: r.id,
-      name: r.provider,
-      logo: r.logo || r.provider.slice(0, 2).toUpperCase(),
-      color: r.color || "bg-indigo-600",
-      status: r.status,
-      uptime: r.uptimePercent,
-      latencyMs: r.latencyMs,
-      errorRate: r.errorRatePercent,
-      dailyRequests: r.dailyRequests,
-      lastIncident: r.lastIncident || "None reported in last 30 days",
-      isActive: r.isActive,
-      isCustom: r.isCustom,
-      apiUrl: r.apiUrl || "",
-      apiKey: r.apiKey || "",
-      secretKey: r.secretKey || "",
-      isConfigured: Boolean(r.apiKey),
-    }));
+    return records.map((r) => {
+      const meta = this.DEFAULT_COURIERS.find((c) => c.name.toLowerCase() === r.provider.toLowerCase());
+      return {
+        id: r.id,
+        name: r.provider,
+        logo: r.logo && r.logo !== "CG" ? r.logo : meta?.logo || r.provider.slice(0, 2).toUpperCase(),
+        color: r.color || meta?.color || "bg-indigo-600",
+        status: r.status,
+        uptime: r.uptimePercent,
+        latencyMs: r.latencyMs,
+        errorRate: r.errorRatePercent,
+        dailyRequests: r.dailyRequests,
+        lastIncident: r.lastIncident || "None reported in last 30 days",
+        isActive: r.isActive,
+        isCustom: r.isCustom,
+        apiUrl: r.apiUrl || "",
+        apiKey: r.apiKey || "",
+        secretKey: r.secretKey || "",
+        isConfigured: Boolean(r.apiKey),
+      };
+    });
   }
 
   async addCourierGateway(dto: CreateCourierGatewayDto) {
