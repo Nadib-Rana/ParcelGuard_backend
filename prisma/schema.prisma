@@ -1,0 +1,414 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id              String         @id @default(uuid()) @db.Uuid
+  email           String         @unique
+  username        String?        @unique
+  password        String
+  firstName       String?        @map("first_name")
+  lastName        String?        @map("last_name")
+  avatarUrl       String?        @map("avatar_url")
+  phoneNumber     String?        @map("phone_number")
+  role            String         @default("MERCHANT_OWNER")
+  status          String         @default("ACTIVE")
+  isEmailVerified Boolean        @default(false) @map("is_email_verified")
+  lastLoginAt     DateTime?      @map("last_login_at")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+  deletedAt       DateTime?      @map("deleted_at")
+
+  merchantProfile MerchantProfile?
+  refreshTokens   RefreshToken[]
+  otps            OtpToken[]
+  posts           Post[]
+  auditLogs       AuditLog[]
+
+  @@index([email])
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model MerchantProfile {
+  id                   String          @id @default(uuid()) @db.Uuid
+  userId               String          @unique @db.Uuid @map("user_id")
+  businessName         String          @map("business_name")
+  ownerName            String?         @map("owner_name")
+  phone                String
+  email                String
+  businessType         String?         @default("F-Commerce") @map("business_type")
+  businessAddress      String?         @map("business_address")
+  district             String?         @default("Dhaka")
+  apiKey               String?         @unique @map("api_key")
+  webhookUrl           String?         @map("webhook_url")
+  webhookSecret        String?         @map("webhook_secret")
+  plan                 String          @default("Starter")
+  status               String          @default("Active")
+  balance              Float           @default(0)
+  monthlyOrders        Int             @default(0) @map("monthly_orders")
+  totalParcels         Int             @default(0) @map("total_parcels")
+  fraudChecksUsed      Int             @default(0) @map("fraud_checks_used")
+  fraudChecksLimit     Int             @default(500) @map("fraud_checks_limit")
+  notifyParcelUpdates  Boolean         @default(true) @map("notify_parcel_updates")
+  notifyPaymentUpdates Boolean         @default(true) @map("notify_payment_updates")
+  notifyHighRiskAlerts Boolean         @default(true) @map("notify_high_risk_alerts")
+  notifySms            Boolean         @default(false) @map("notify_sms")
+  notifyEmail          Boolean         @default(true) @map("notify_email")
+  createdAt            DateTime        @default(now()) @map("created_at")
+  updatedAt            DateTime        @updatedAt @map("updated_at")
+
+  user                 User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  parcels              Parcel[]
+  customers            Customer[]
+  courierAccounts      CourierAccount[]
+  settlements          Settlement[]
+  fraudChecks          FraudCheckLog[]
+  transactions         PlatformTransaction[]
+  notifications        AppNotification[]
+  disputes             DisputeTicket[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([plan])
+  @@map("merchant_profiles")
+}
+
+model Parcel {
+  id               String          @id @default(uuid()) @db.Uuid
+  trackingId       String          @unique @map("tracking_id")
+  consignmentId    String?         @map("consignment_id")
+  merchantId       String          @db.Uuid @map("merchant_id")
+  recipientName    String          @map("recipient_name")
+  recipientPhone   String          @map("recipient_phone")
+  recipientAddress String          @map("recipient_address")
+  district         String
+  area             String?
+  productTitle     String          @map("product_title")
+  category         String?
+  weightKg         Float           @default(1.0) @map("weight_kg")
+  courier          String          @default("Steadfast")
+  codAmount        Float           @default(0) @map("cod_amount")
+  deliveryCharge   Float           @default(0) @map("delivery_charge")
+  advancePaid      Float           @default(0) @map("advance_paid")
+  riskLevel        String          @default("Safe") @map("risk_level")
+  riskScore        Int             @default(15) @map("risk_score")
+  status           String          @default("Pending Pickup")
+  riderName        String?         @map("rider_name")
+  riderPhone       String?         @map("rider_phone")
+  notes            String?
+  metadata         Json?
+  dateStr          String?         @map("date_str")
+  createdAt        DateTime        @default(now()) @map("created_at")
+  updatedAt        DateTime        @updatedAt @map("updated_at")
+
+  merchant         MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  timeline         ParcelTimeline[]
+
+  @@index([merchantId])
+  @@index([trackingId])
+  @@index([recipientPhone])
+  @@index([status])
+  @@index([courier])
+  @@map("parcels")
+}
+
+model ParcelTimeline {
+  id          String   @id @default(uuid()) @db.Uuid
+  parcelId    String   @db.Uuid @map("parcel_id")
+  status      String
+  title       String
+  location    String?
+  notes       String?
+  timestamp   DateTime @default(now())
+  rawResponse Json?    @map("raw_response")
+
+  parcel      Parcel   @relation(fields: [parcelId], references: [id], onDelete: Cascade)
+
+  @@index([parcelId])
+  @@map("parcel_timelines")
+}
+
+model Customer {
+  id             String          @id @default(uuid()) @db.Uuid
+  merchantId     String          @db.Uuid @map("merchant_id")
+  phone          String
+  name           String
+  ordersCount    Int             @default(1) @map("orders_count")
+  deliveredCount Int             @default(0) @map("delivered_count")
+  returnedCount  Int             @default(0) @map("returned_count")
+  cancelledCount Int             @default(0) @map("cancelled_count")
+  successRate    String          @default("100%") @map("success_rate")
+  riskLevel      String          @default("Safe") @map("risk_level")
+  isWatchlist    Boolean         @default(false) @map("is_watchlist")
+  notes          String?
+  lastOrderAt    DateTime        @default(now()) @map("last_order_at")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  merchant       MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, phone])
+  @@index([merchantId])
+  @@index([phone])
+  @@map("customers")
+}
+
+model FraudCheckLog {
+  id               String           @id @default(uuid()) @db.Uuid
+  merchantId       String?          @db.Uuid @map("merchant_id")
+  phone            String
+  name             String?
+  riskScore        Int              @map("risk_score")
+  riskCategory     String           @map("risk_category")
+  successRate      String           @map("success_rate")
+  totalOrdersFound Int              @default(0) @map("total_orders_found")
+  deliveredFound   Int              @default(0) @map("delivered_found")
+  returnedFound    Int              @default(0) @map("returned_found")
+  cancelledFound   Int              @default(0) @map("cancelled_found")
+  factors          Json?
+  recommendation   String?
+  createdAt        DateTime         @default(now()) @map("created_at")
+
+  merchant         MerchantProfile? @relation(fields: [merchantId], references: [id], onDelete: SetNull)
+
+  @@index([phone])
+  @@index([merchantId])
+  @@map("fraud_check_logs")
+}
+
+model GlobalBlacklistEntry {
+  id                   String   @id @default(uuid()) @db.Uuid
+  phone                String   @unique
+  customerName         String   @map("customer_name")
+  riskScore            Int      @default(85) @map("risk_score")
+  reportedByCount      Int      @default(1) @map("reported_by_count")
+  totalReturns         Int      @default(0) @map("total_returns")
+  reason               String
+  status               String   @default("Confirmed Fraud")
+  reportedByMerchantId String?  @db.Uuid @map("reported_by_merchant_id")
+  addedBy              String   @default("Super Admin") @map("added_by")
+  createdAt            DateTime @default(now()) @map("created_at")
+  updatedAt            DateTime @updatedAt @map("updated_at")
+
+  @@index([phone])
+  @@index([status])
+  @@map("global_blacklist")
+}
+
+model CourierAccount {
+  id                String          @id @default(uuid()) @db.Uuid
+  merchantId        String          @db.Uuid @map("merchant_id")
+  provider          String
+  apiKey            String?         @map("api_key")
+  secretKey         String?         @map("secret_key")
+  merchantCourierId String?         @map("merchant_courier_id")
+  isConnected       Boolean         @default(false) @map("is_connected")
+  currentBalance    Float           @default(0) @map("current_balance")
+  webhookEnabled    Boolean         @default(false) @map("webhook_enabled")
+  lastSyncedAt      DateTime?       @map("last_synced_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  merchant          MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@unique([merchantId, provider])
+  @@index([merchantId])
+  @@map("courier_accounts")
+}
+
+model CourierHealthMetric {
+  id               String   @id @default(uuid()) @db.Uuid
+  provider         String   @unique
+  uptimePercent    String   @default("99.9%") @map("uptime_percent")
+  latencyMs        Int      @default(150) @map("latency_ms")
+  errorRatePercent String   @default("0.1%") @map("error_rate_percent")
+  status           String   @default("Operational")
+  dailyRequests    Int      @default(0) @map("daily_requests")
+  lastIncident     String?  @map("last_incident")
+  checkedAt        DateTime @default(now()) @map("checked_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("courier_health_metrics")
+}
+
+model Settlement {
+  id                String          @id @default(uuid()) @db.Uuid
+  settlementCode    String          @unique @map("settlement_code")
+  merchantId        String          @db.Uuid @map("merchant_id")
+  courierProvider   String          @map("courier_provider")
+  period            String
+  periodStart       DateTime?       @map("period_start")
+  periodEnd         DateTime?       @map("period_end")
+  expectedCod       Float           @default(0) @map("expected_cod")
+  receivedPayout    Float           @default(0) @map("received_payout")
+  discrepancyAmount Float           @default(0) @map("discrepancy_amount")
+  status            String          @default("Pending")
+  parcelsCount      Int             @default(0) @map("parcels_count")
+  disputeReason     String?         @map("dispute_reason")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+
+  merchant          MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  disputes          DisputeTicket[]
+
+  @@index([merchantId])
+  @@index([settlementCode])
+  @@index([status])
+  @@map("settlements")
+}
+
+model DisputeTicket {
+  id              String          @id @default(uuid()) @db.Uuid
+  settlementId    String          @db.Uuid @map("settlement_id")
+  merchantId      String          @db.Uuid @map("merchant_id")
+  reason          String
+  disputedAmount  Float           @default(0) @map("disputed_amount")
+  status          String          @default("Open")
+  resolutionNotes String?         @map("resolution_notes")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  settlement      Settlement      @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  merchant        MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([settlementId])
+  @@index([merchantId])
+  @@map("dispute_tickets")
+}
+
+model PlatformTransaction {
+  id              String          @id @default(uuid()) @db.Uuid
+  trxNumber       String          @unique @map("trx_number")
+  merchantId      String          @db.Uuid @map("merchant_id")
+  merchantName    String?         @map("merchant_name")
+  amount          Float
+  method          String          @default("bKash")
+  type            String          @default("Subscription")
+  status          String          @default("Completed")
+  trxId           String          @map("trx_id")
+  gatewayResponse Json?           @map("gateway_response")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  merchant        MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([trxNumber])
+  @@map("platform_transactions")
+}
+
+model SystemBroadcast {
+  id             String   @id @default(uuid()) @db.Uuid
+  broadcastCode  String   @unique @map("broadcast_code")
+  title          String
+  message        String
+  type           String   @default("info")
+  target         String   @default("All Merchants")
+  deliveredCount Int      @default(0) @map("delivered_count")
+  sentAt         DateTime @default(now()) @map("sent_at")
+
+  @@map("system_broadcasts")
+}
+
+model AppNotification {
+  id         String          @id @default(uuid()) @db.Uuid
+  numericId  Int?            @map("numeric_id")
+  merchantId String          @db.Uuid @map("merchant_id")
+  category   String          @default("System")
+  title      String
+  body       String
+  isRead     Boolean         @default(false) @map("is_read")
+  metadata   Json?
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  merchant   MerchantProfile @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([isRead])
+  @@map("app_notifications")
+}
+
+model SystemConfig {
+  id              String   @id @default(uuid()) @db.Uuid
+  maintenanceMode Boolean  @default(false) @map("maintenance_mode")
+  noticeBanner    String?  @map("notice_banner")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@map("system_configs")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  tokenHash String   @unique @map("token_hash")
+  userId    String   @db.Uuid @map("user_id")
+  device    String?
+  ipAddress String?  @map("ip_address")
+  expiresAt DateTime @map("expires_at")
+  isRevoked Boolean  @default(false) @map("is_revoked")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model OtpToken {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String
+  code      String
+  type      String   @default("EMAIL_VERIFICATION")
+  expiresAt DateTime @map("expires_at")
+  isUsed    Boolean  @default(false) @map("is_used")
+  userId    String?  @db.Uuid @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([email, type])
+  @@map("otp_tokens")
+}
+
+model Post {
+  id         String   @id @default(uuid()) @db.Uuid
+  slug       String   @unique
+  title      String
+  summary    String?  @db.Text
+  content    String   @db.Text
+  coverImage String?  @map("cover_image")
+  published  Boolean  @default(false)
+  tags       String[] @default([])
+  authorId   String   @db.Uuid @map("author_id")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  author     User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([authorId])
+  @@index([slug])
+  @@map("posts")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid @map("user_id")
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  details   Json?
+  ipAddress String?  @map("ip_address")
+  userAgent String?  @map("user_agent")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity])
+  @@map("audit_logs")
+}

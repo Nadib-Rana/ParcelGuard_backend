@@ -1,0 +1,73 @@
+version: "3.9"
+
+services:
+  # NestJS Application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nest_starter_api
+    restart: always
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://postgres:postgrespassword@postgres:5432/nest_starter_db?schema=public
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}
+      STORAGE_ENDPOINT: minio
+      STORAGE_PORT: 9000
+      STORAGE_USE_SSL: "false"
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
+      STORAGE_BUCKET: ${STORAGE_BUCKET}
+      MAIL_HOST: ${MAIL_HOST}
+      MAIL_PORT: ${MAIL_PORT}
+      MAIL_USER: ${MAIL_USER}
+      MAIL_PASSWORD: ${MAIL_PASSWORD}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - nest_starter_network
+
+  # PostgreSQL
+  postgres:
+    image: postgres:17-alpine
+    container_name: nest_starter_prod_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: nest_starter_db
+    volumes:
+      - nest_prod_postgres_data:/var/lib/postgresql/data
+    networks:
+      - nest_starter_network
+
+  # MinIO
+  minio:
+    image: minio/minio:latest
+    container_name: nest_starter_prod_minio
+    restart: always
+    ports:
+      - "9000:9000"
+    environment:
+      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:-minioadmin}
+    volumes:
+      - nest_prod_minio_data:/data
+    command: server /data
+    networks:
+      - nest_starter_network
+
+networks:
+  nest_starter_network:
+    driver: bridge
+
+volumes:
+  nest_prod_postgres_data:
+    driver: local
+  nest_prod_minio_data:
+    driver: local
