@@ -15,6 +15,7 @@ import { CheckPhoneRiskDto, BatchScanRiskDto, ReportFraudDto } from "./dto/fraud
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ResponseMessage } from "../../common/decorators/response-message.decorator";
+import { Public } from "../../common/decorators/public.decorator";
 import { PrismaService } from "../../database/prisma.service";
 
 @ApiTags("Fraud Prevention")
@@ -34,8 +35,7 @@ export class FraudController {
     return profile?.id;
   }
 
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth("bearer")
+  @Public()
   @Post("check-phone")
   @ApiOperation({ summary: "Evaluate fraud & return risk score for a single mobile number" })
   @ResponseMessage("Phone risk evaluated successfully")
@@ -47,8 +47,7 @@ export class FraudController {
     return this.fraudService.evaluatePhoneRisk(dto, merchantId);
   }
 
-  @UseGuards(JwtAuthGuard)
-  @ApiBearerAuth("bearer")
+  @Public()
   @Post("batch-scan")
   @ApiOperation({ summary: "Batch evaluate fraud risk for multiple mobile numbers" })
   @ResponseMessage("Batch scan completed")
