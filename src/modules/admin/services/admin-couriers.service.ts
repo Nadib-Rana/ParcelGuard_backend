@@ -6,40 +6,24 @@ import { CourierHealthStatus } from "../../../common/enums";
 @Injectable()
 export class AdminCouriersService {
   private readonly DEFAULT_COURIERS = [
-    { name: "Steadfast", logo: "SC", color: "bg-emerald-600", defaultUptime: "99.9%", defaultLatency: 120 },
-    { name: "Pathao", logo: "PC", color: "bg-indigo-600", defaultUptime: "99.8%", defaultLatency: 145 },
-    { name: "RedX", logo: "RX", color: "bg-rose-600", defaultUptime: "98.7%", defaultLatency: 210 },
-    { name: "Paperfly", logo: "PF", color: "bg-amber-600", defaultUptime: "99.2%", defaultLatency: 160 },
-    { name: "ParcelDex", logo: "PD", color: "bg-blue-600", defaultUptime: "99.5%", defaultLatency: 130 },
-    { name: "CarryBee", logo: "CB", color: "bg-purple-600", defaultUptime: "99.1%", defaultLatency: 180 },
+    { name: "Steadfast", logo: "SC", color: "bg-emerald-600", uptime: "99.9%", latency: 120 },
+    { name: "Pathao", logo: "PC", color: "bg-indigo-600", uptime: "99.8%", latency: 145 },
+    { name: "RedX", logo: "RX", color: "bg-rose-600", uptime: "98.7%", latency: 210 },
+    { name: "Paperfly", logo: "PF", color: "bg-amber-600", uptime: "99.2%", latency: 160 },
+    { name: "ParcelDex", logo: "PD", color: "bg-blue-600", uptime: "99.5%", latency: 130 },
+    { name: "CarryBee", logo: "CB", color: "bg-purple-600", uptime: "99.1%", latency: 180 },
   ];
 
   constructor(private readonly prisma: PrismaService) {}
 
   async getCourierHealth() {
     for (const c of this.DEFAULT_COURIERS) {
-      const envKey = c.name === "Steadfast" ? process.env.STEADFAST_API_KEY : c.name === "Pathao" ? process.env.PATHAO_CLIENT_ID : c.name === "RedX" ? process.env.REDX_API_TOKEN : null;
-      const envSecret = c.name === "Steadfast" ? process.env.STEADFAST_SECRET_KEY : c.name === "Pathao" ? process.env.PATHAO_CLIENT_SECRET : null;
-
+      const key = c.name === "Steadfast" ? process.env.STEADFAST_API_KEY : c.name === "Pathao" ? process.env.PATHAO_CLIENT_ID : c.name === "RedX" ? process.env.REDX_API_TOKEN : c.name === "Paperfly" ? process.env.PAPERFLY_KEY : null;
+      const secret = c.name === "Steadfast" ? process.env.STEADFAST_SECRET_KEY : c.name === "Pathao" ? process.env.PATHAO_CLIENT_SECRET : null;
       await this.prisma.courierHealthMetric.upsert({
         where: { provider: c.name },
-        update: {
-          logo: c.logo,
-          color: c.color,
-          ...(envKey ? { apiKey: envKey } : {}),
-          ...(envSecret ? { secretKey: envSecret } : {}),
-        },
-        create: {
-          provider: c.name,
-          logo: c.logo,
-          color: c.color,
-          uptimePercent: c.defaultUptime,
-          latencyMs: c.defaultLatency,
-          status: CourierHealthStatus.OPERATIONAL,
-          isCustom: false,
-          apiKey: envKey,
-          secretKey: envSecret,
-        },
+        update: { logo: c.logo, color: c.color, ...(key ? { apiKey: key } : {}), ...(secret ? { secretKey: secret } : {}) },
+        create: { provider: c.name, logo: c.logo, color: c.color, uptimePercent: c.uptime, latencyMs: c.latency, status: CourierHealthStatus.OPERATIONAL, isCustom: false, apiKey: key, secretKey: secret },
       });
     }
 
@@ -69,8 +53,7 @@ export class AdminCouriersService {
 
   async addCourierGateway(dto: CreateCourierGatewayDto) {
     const existing = await this.prisma.courierHealthMetric.findUnique({ where: { provider: dto.name.trim() } });
-    if (existing) throw new BadRequestException("Courier gateway with this name already exists");
-
+    if (existing) throw new BadRequestException("Courier gateway already exists");
     return this.prisma.courierHealthMetric.create({
       data: {
         provider: dto.name.trim(),
@@ -79,108 +62,59 @@ export class AdminCouriersService {
         apiUrl: dto.apiUrl,
         apiKey: dto.apiKey,
         secretKey: dto.secretKey,
-        isActive: dto.isActive !== undefined ? dto.isActive : true,
+        isActive: dto.isActive ?? true,
         isCustom: true,
         status: CourierHealthStatus.OPERATIONAL,
-        uptimePercent: "99.9%",
-        latencyMs: 120,
       },
     });
   }
 
   async deleteCourierGateway(provider: string) {
-    const record = await this.prisma.courierHealthMetric.findUnique({ where: { provider } });
-    if (!record) throw new NotFoundException("Courier gateway not found");
+    const r = await this.prisma.courierHealthMetric.findUnique({ where: { provider } });
+    if (!r) throw new NotFoundException("Courier gateway not found");
     return this.prisma.courierHealthMetric.delete({ where: { provider } });
   }
 
   async updateMasterCredentials(dto: UpdateMasterCourierDto) {
     return this.prisma.courierHealthMetric.upsert({
       where: { provider: dto.provider },
-      update: {
-        apiKey: dto.apiKey !== undefined ? dto.apiKey : undefined,
-        secretKey: dto.secretKey !== undefined ? dto.secretKey : undefined,
-        isActive: dto.isActive !== undefined ? dto.isActive : undefined,
-      },
-      create: { provider: dto.provider, apiKey: dto.apiKey, secretKey: dto.secretKey, isActive: dto.isActive !== undefined ? dto.isActive : true },
+      update: { apiKey: dto.apiKey, secretKey: dto.secretKey, isActive: dto.isActive },
+      create: { provider: dto.provider, apiKey: dto.apiKey, secretKey: dto.secretKey, isActive: dto.isActive ?? true },
     });
   }
 
   async testConnection(provider: string) {
-    const record = await this.prisma.courierHealthMetric.findUnique({ where: { provider } });
     const start = Date.now();
-
-    if (provider.toLowerCase() === "steadfast") {
-      const apiKey = record?.apiKey || process.env.STEADFAST_API_KEY;
-      const secretKey = record?.secretKey || process.env.STEADFAST_SECRET_KEY;
-      if (apiKey && secretKey) {
-        try {
-          const res = await fetch("https://portal.packzy.com/api/v1/get_balance", {
-            headers: { "Api-Key": apiKey, "Secret-Key": secretKey, "Content-Type": "application/json" },
-          });
-          const latency = Date.now() - start;
-          if (res.ok) {
-            await this.prisma.courierHealthMetric.update({
-              where: { provider },
-              data: { latencyMs: latency, status: CourierHealthStatus.OPERATIONAL, checkedAt: new Date() },
-            });
-            return { success: true, latencyMs: latency, message: `Steadfast Live Gateway Responsive (${latency}ms)`, timestamp: new Date().toISOString() };
-          }
-        } catch {}
-      }
-    } else if (provider.toLowerCase() === "pathao") {
-      try {
+    const p = provider.toLowerCase();
+    const r = await this.prisma.courierHealthMetric.findUnique({ where: { provider } });
+    try {
+      if (p === "steadfast" && (r?.apiKey || process.env.STEADFAST_API_KEY)) {
+        const res = await fetch("https://portal.packzy.com/api/v1/get_balance", { headers: { "Api-Key": r?.apiKey || process.env.STEADFAST_API_KEY!, "Secret-Key": r?.secretKey || process.env.STEADFAST_SECRET_KEY! } });
+        if (res.ok) return this.recordPing(provider, Date.now() - start, "Steadfast Live Gateway Responsive");
+      } else if (p === "pathao") {
         const res = await fetch("https://api-hermes.pathao.com/aladdin/api/v1/issue-token", { method: "POST" });
-        const latency = Date.now() - start;
-        if (res.status < 500) {
-          await this.prisma.courierHealthMetric.update({
-            where: { provider },
-            data: { latencyMs: latency, status: CourierHealthStatus.OPERATIONAL, checkedAt: new Date() },
-          });
-          return { success: true, latencyMs: latency, message: `Pathao Hermes Gateway Responsive (${latency}ms)`, timestamp: new Date().toISOString() };
-        }
-      } catch {}
-    } else if (provider.toLowerCase() === "redx") {
-      const token = record?.apiKey || process.env.REDX_API_TOKEN;
-      if (token) {
-        try {
-          const baseUrl = process.env.REDX_BASE_URL || "https://openapi.redx.com.bd/v1.0.0-beta";
-          const res = await fetch(`${baseUrl}/areas`, {
-            headers: { "API-ACCESS-TOKEN": `Bearer ${token}`, "Content-Type": "application/json" },
-          });
-          const latency = Date.now() - start;
-          if (res.ok) {
-            await this.prisma.courierHealthMetric.update({
-              where: { provider },
-              data: { latencyMs: latency, status: CourierHealthStatus.OPERATIONAL, checkedAt: new Date() },
-            });
-            return { success: true, latencyMs: latency, message: `RedX Production Gateway Responsive (${latency}ms)`, timestamp: new Date().toISOString() };
-          }
-        } catch {}
+        if (res.status < 500) return this.recordPing(provider, Date.now() - start, "Pathao Hermes Gateway Responsive");
+      } else if (p === "redx" && (r?.apiKey || process.env.REDX_API_TOKEN)) {
+        const res = await fetch("https://openapi.redx.com.bd/v1.0.0-beta/areas", { headers: { "API-ACCESS-TOKEN": `Bearer ${r?.apiKey || process.env.REDX_API_TOKEN}` } });
+        if (res.ok) return this.recordPing(provider, Date.now() - start, "RedX Production Gateway Responsive");
+      } else if (p === "paperfly" && (r?.apiKey || process.env.PAPERFLY_KEY)) {
+        const res = await fetch("https://api.paperfly.com.bd/merchant/api/service/new_order_v2.php", { method: "POST", headers: { paperflykey: r?.apiKey || process.env.PAPERFLY_KEY!, "Content-Type": "application/json" }, body: "{}" });
+        if (res.status < 500) return this.recordPing(provider, Date.now() - start, "Paperfly Gateway Responsive");
       }
-    }
-
+    } catch {}
     const latency = Date.now() - start || 120;
     return { success: true, latencyMs: latency, message: `${provider} Gateway Ping OK (${latency}ms)`, timestamp: new Date().toISOString() };
   }
 
+  private async recordPing(provider: string, latency: number, msg: string) {
+    await this.prisma.courierHealthMetric.update({ where: { provider }, data: { latencyMs: latency, status: CourierHealthStatus.OPERATIONAL, checkedAt: new Date() } });
+    return { success: true, latencyMs: latency, message: `${msg} (${latency}ms)`, timestamp: new Date().toISOString() };
+  }
+
   async toggleCourierHealth(dto: ToggleCourierHealthDto) {
-    const metric = await this.prisma.courierHealthMetric.findUnique({ where: { provider: dto.provider } });
-    if (!metric) throw new NotFoundException("Courier health metric not found");
-
-    const nextStatus =
-      metric.status === CourierHealthStatus.OPERATIONAL
-        ? CourierHealthStatus.DEGRADED
-        : metric.status === CourierHealthStatus.DEGRADED
-        ? CourierHealthStatus.OUTAGE
-        : CourierHealthStatus.OPERATIONAL;
-
-    return this.prisma.courierHealthMetric.update({
-      where: { id: metric.id },
-      data: {
-        status: nextStatus,
-        lastIncident: nextStatus !== CourierHealthStatus.OPERATIONAL ? `Status set to ${nextStatus} by Super Admin` : metric.lastIncident,
-      },
-    });
+    const m = await this.prisma.courierHealthMetric.findUnique({ where: { provider: dto.provider } });
+    if (!m) throw new NotFoundException("Courier health metric not found");
+    const next = m.status === CourierHealthStatus.OPERATIONAL ? CourierHealthStatus.DEGRADED : m.status === CourierHealthStatus.DEGRADED ? CourierHealthStatus.OUTAGE : CourierHealthStatus.OPERATIONAL;
+    return this.prisma.courierHealthMetric.update({ where: { id: m.id }, data: { status: next, lastIncident: next !== CourierHealthStatus.OPERATIONAL ? `Set to ${next} by Super Admin` : m.lastIncident } });
   }
 }
