@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+﻿import { Injectable } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
 import {
   UpdateMerchantStatusDto,
@@ -7,6 +7,7 @@ import {
   SendBroadcastDto,
   ToggleCourierHealthDto,
   UpdateMasterCourierDto,
+  CreateCourierGatewayDto,
 } from "./dto/admin.dto";
 import { AdminMerchantsService } from "./services/admin-merchants.service";
 import { AdminBlacklistService } from "./services/admin-blacklist.service";
@@ -41,6 +42,8 @@ export class AdminService {
   updateMerchantPlan(id: string, dto: UpdateMerchantPlanDto) { return this.merchantsService.updateMerchantPlan(id, dto); }
 
   getCourierHealth() { return this.couriersService.getCourierHealth(); }
+  addCourierGateway(dto: CreateCourierGatewayDto) { return this.couriersService.addCourierGateway(dto); }
+  deleteCourierGateway(provider: string) { return this.couriersService.deleteCourierGateway(provider); }
   updateMasterCredentials(dto: UpdateMasterCourierDto) { return this.couriersService.updateMasterCredentials(dto); }
   testCourierConnection(provider: string) { return this.couriersService.testConnection(provider); }
   toggleCourierHealth(dto: ToggleCourierHealthDto) { return this.couriersService.toggleCourierHealth(dto); }

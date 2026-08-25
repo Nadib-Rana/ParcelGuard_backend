@@ -1,11 +1,11 @@
-﻿import { Injectable, NotFoundException } from "@nestjs/common";
+﻿import { Injectable, NotFoundException, BadRequestException } from "@nestjs/common";
 import { PrismaService } from "../../../database/prisma.service";
-import { ToggleCourierHealthDto, UpdateMasterCourierDto } from "../dto/admin.dto";
+import { ToggleCourierHealthDto, UpdateMasterCourierDto, CreateCourierGatewayDto } from "../dto/admin.dto";
 import { CourierHealthStatus } from "../../../common/enums";
 
 @Injectable()
 export class AdminCouriersService {
-  private readonly COURIERS = [
+  private readonly DEFAULT_COURIERS = [
     { name: "Steadfast", logo: "SC", color: "bg-emerald-600", defaultUptime: "99.9%", defaultLatency: 120 },
     { name: "Pathao", logo: "PC", color: "bg-indigo-600", defaultUptime: "99.8%", defaultLatency: 145 },
     { name: "RedX", logo: "RX", color: "bg-red-600", defaultUptime: "98.7%", defaultLatency: 210 },
@@ -17,39 +17,68 @@ export class AdminCouriersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getCourierHealth() {
-    for (const c of this.COURIERS) {
+    for (const c of this.DEFAULT_COURIERS) {
       await this.prisma.courierHealthMetric.upsert({
         where: { provider: c.name },
         update: {},
         create: {
           provider: c.name,
+          logo: c.logo,
+          color: c.color,
           uptimePercent: c.defaultUptime,
           latencyMs: c.defaultLatency,
           status: CourierHealthStatus.OPERATIONAL,
+          isCustom: false,
         },
       });
     }
 
     const records = await this.prisma.courierHealthMetric.findMany({ orderBy: { provider: "asc" } });
-    return records.map((r) => {
-      const meta = this.COURIERS.find((c) => c.name.toLowerCase() === r.provider.toLowerCase());
-      return {
-        id: r.id,
-        name: r.provider,
-        logo: meta?.logo || "CG",
-        color: meta?.color || "bg-indigo-600",
-        status: r.status,
-        uptime: r.uptimePercent,
-        latencyMs: r.latencyMs,
-        errorRate: r.errorRatePercent,
-        dailyRequests: r.dailyRequests,
-        lastIncident: r.lastIncident || "None reported in last 30 days",
-        isActive: r.isActive,
-        apiKey: r.apiKey || "",
-        secretKey: r.secretKey || "",
-        isConfigured: Boolean(r.apiKey),
-      };
+    return records.map((r) => ({
+      id: r.id,
+      name: r.provider,
+      logo: r.logo || r.provider.slice(0, 2).toUpperCase(),
+      color: r.color || "bg-indigo-600",
+      status: r.status,
+      uptime: r.uptimePercent,
+      latencyMs: r.latencyMs,
+      errorRate: r.errorRatePercent,
+      dailyRequests: r.dailyRequests,
+      lastIncident: r.lastIncident || "None reported in last 30 days",
+      isActive: r.isActive,
+      isCustom: r.isCustom,
+      apiUrl: r.apiUrl || "",
+      apiKey: r.apiKey || "",
+      secretKey: r.secretKey || "",
+      isConfigured: Boolean(r.apiKey),
+    }));
+  }
+
+  async addCourierGateway(dto: CreateCourierGatewayDto) {
+    const existing = await this.prisma.courierHealthMetric.findUnique({ where: { provider: dto.name.trim() } });
+    if (existing) throw new BadRequestException("Courier gateway with this name already exists");
+
+    return this.prisma.courierHealthMetric.create({
+      data: {
+        provider: dto.name.trim(),
+        logo: dto.logo?.trim() || dto.name.trim().slice(0, 2).toUpperCase(),
+        color: dto.color || "bg-indigo-600",
+        apiUrl: dto.apiUrl,
+        apiKey: dto.apiKey,
+        secretKey: dto.secretKey,
+        isActive: dto.isActive !== undefined ? dto.isActive : true,
+        isCustom: true,
+        status: CourierHealthStatus.OPERATIONAL,
+        uptimePercent: "99.9%",
+        latencyMs: 120,
+      },
     });
+  }
+
+  async deleteCourierGateway(provider: string) {
+    const record = await this.prisma.courierHealthMetric.findUnique({ where: { provider } });
+    if (!record) throw new NotFoundException("Courier gateway not found");
+    return this.prisma.courierHealthMetric.delete({ where: { provider } });
   }
 
   async updateMasterCredentials(dto: UpdateMasterCourierDto) {
@@ -60,12 +89,7 @@ export class AdminCouriersService {
         secretKey: dto.secretKey !== undefined ? dto.secretKey : undefined,
         isActive: dto.isActive !== undefined ? dto.isActive : undefined,
       },
-      create: {
-        provider: dto.provider,
-        apiKey: dto.apiKey,
-        secretKey: dto.secretKey,
-        isActive: dto.isActive !== undefined ? dto.isActive : true,
-      },
+      create: { provider: dto.provider, apiKey: dto.apiKey, secretKey: dto.secretKey, isActive: dto.isActive !== undefined ? dto.isActive : true },
     });
   }
 
@@ -94,7 +118,7 @@ export class AdminCouriersService {
     }
 
     const latency = Date.now() - start || 120;
-    return { success: true, latencyMs: latency, message: `${provider} Gateway Health Check Passed (${latency}ms)`, timestamp: new Date().toISOString() };
+    return { success: true, latencyMs: latency, message: `${provider} Gateway Ping OK (${latency}ms)`, timestamp: new Date().toISOString() };
   }
 
   async toggleCourierHealth(dto: ToggleCourierHealthDto) {

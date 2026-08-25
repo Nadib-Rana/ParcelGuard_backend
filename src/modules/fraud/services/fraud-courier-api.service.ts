@@ -14,12 +14,19 @@ export interface CourierFraudStats {
 @Injectable()
 export class FraudCourierApiService {
   private readonly logger = new Logger(FraudCourierApiService.name);
-  private readonly COURIERS = ["Steadfast", "Pathao", "RedX", "Paperfly", "ParcelDex", "CarryBee"];
+  private readonly DEFAULT_COURIERS = ["Steadfast", "Pathao", "RedX", "Paperfly", "ParcelDex", "CarryBee"];
 
   constructor(private readonly prisma: PrismaService) {}
 
   async fetchCourierLiveStats(phone: string, merchantId?: string): Promise<{ combined: CourierFraudStats; breakdown: CourierBreakdown[] }> {
-    const results = await Promise.allSettled(this.COURIERS.map((c) => this.fetchProviderStats(c, phone, merchantId)));
+    const dbCouriers = await this.prisma.courierHealthMetric.findMany({
+      where: { isActive: true },
+      select: { provider: true },
+      orderBy: { provider: "asc" },
+    });
+    const courierList = dbCouriers.length > 0 ? dbCouriers.map((c) => c.provider) : this.DEFAULT_COURIERS;
+
+    const results = await Promise.allSettled(courierList.map((c) => this.fetchProviderStats(c, phone, merchantId)));
     const breakdown: CourierBreakdown[] = [];
     let totalParcels = 0;
     let totalDelivered = 0;
@@ -27,7 +34,7 @@ export class FraudCourierApiService {
 
     results.forEach((res, i) => {
       const stats = res.status === "fulfilled" ? res.value : null;
-      const provider = this.COURIERS[i];
+      const provider = courierList[i];
       const entry: CourierBreakdown = stats || { provider, totalParcels: 0, delivered: 0, cancelled: 0, deliveryRatio: 0 };
       breakdown.push(entry);
       totalParcels += entry.totalParcels;
@@ -56,7 +63,7 @@ export class FraudCourierApiService {
         return { provider, totalParcels: local.length, delivered, cancelled, deliveryRatio: ratio };
       }
 
-      if (provider === "Steadfast") {
+      if (provider.toLowerCase() === "steadfast") {
         const keys = await this.getCredentials(merchantId, "Steadfast");
         if (keys.apiKey && keys.secretKey) {
           const res = await fetch(`https://portal.packzy.com/api/v1/fraud_check/${phone}`, {
@@ -143,7 +150,7 @@ export class FraudCourierApiService {
       cancelled: stats.cancelled,
       successRate: `${ratio.toFixed(1)}%`,
       factors: [
-        `৬টি কুরিয়ার নেটওয়ার্ক স্ক্যান: সর্বমোট ${stats.totalParcels}টি পার্সেল ট্র্যাক করা হয়েছে`,
+        `কুরিয়ার নেটওয়ার্ক স্ক্যান: সর্বমোট ${stats.totalParcels}টি পার্সেল ট্র্যাক করা হয়েছে`,
         `কুরিয়ার ডেলিভারি রেট: ${ratio.toFixed(1)}% (${stats.delivered} ডেলিভারি / ${stats.cancelled} বাতিল)`,
         risk === RiskLevel.HIGH_RISK ? "কুরিয়ার হাবে ঘনঘন পার্সেল রিজেকশনের রেকর্ড রয়েছে" : "ভেরিফাইড ও নির্ভরযোগ্য কাস্টমার রেকর্ড",
       ],

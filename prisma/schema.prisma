@@ -225,9 +225,13 @@ model CourierAccount {
 model CourierHealthMetric {
   id               String   @id @default(uuid()) @db.Uuid
   provider         String   @unique
+  logo             String?  @default("CG")
+  color            String?  @default("bg-indigo-600")
+  apiUrl           String?  @map("api_url")
   apiKey           String?  @map("api_key")
   secretKey        String?  @map("secret_key")
   isActive         Boolean  @default(true) @map("is_active")
+  isCustom         Boolean  @default(false) @map("is_custom")
   uptimePercent    String   @default("99.9%") @map("uptime_percent")
   latencyMs        Int      @default(150) @map("latency_ms")
   errorRatePercent String   @default("0.1%") @map("error_rate_percent")

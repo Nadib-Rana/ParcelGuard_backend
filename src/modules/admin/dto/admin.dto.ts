@@ -1,15 +1,15 @@
-import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
-import { IsNotEmpty, IsString, IsOptional, IsNumber } from "class-validator";
+﻿import { ApiProperty, ApiPropertyOptional } from "@nestjs/swagger";
+import { IsNotEmpty, IsString, IsOptional, IsNumber, IsBoolean } from "class-validator";
 
 export class UpdateMerchantStatusDto {
-  @ApiProperty({ example: "Active", description: "Active | Suspended | Trial" })
+  @ApiProperty({ example: "Active" })
   @IsNotEmpty()
   @IsString()
   status: string;
 }
 
 export class UpdateMerchantPlanDto {
-  @ApiProperty({ example: "Growth", description: "Starter | Growth | Enterprise" })
+  @ApiProperty({ example: "Growth" })
   @IsNotEmpty()
   @IsString()
   plan: string;
@@ -53,12 +53,12 @@ export class SendBroadcastDto {
   @IsString()
   message: string;
 
-  @ApiProperty({ example: "warning", description: "info | warning | urgent | maintenance" })
+  @ApiProperty({ example: "warning" })
   @IsNotEmpty()
   @IsString()
   type: string;
 
-  @ApiProperty({ example: "All Merchants", description: "All Merchants | Starter | Growth | Enterprise" })
+  @ApiProperty({ example: "All Merchants" })
   @IsNotEmpty()
   @IsString()
   target: string;
@@ -89,6 +89,43 @@ export class UpdateMasterCourierDto {
 
   @ApiPropertyOptional({ example: true })
   @IsOptional()
+  isActive?: boolean;
+}
+
+export class CreateCourierGatewayDto {
+  @ApiProperty({ example: "eCourier" })
+  @IsNotEmpty()
+  @IsString()
+  name: string;
+
+  @ApiPropertyOptional({ example: "EC" })
+  @IsOptional()
+  @IsString()
+  logo?: string;
+
+  @ApiPropertyOptional({ example: "bg-cyan-600" })
+  @IsOptional()
+  @IsString()
+  color?: string;
+
+  @ApiPropertyOptional({ example: "https://api.ecourier.com.bd/api/v1" })
+  @IsOptional()
+  @IsString()
+  apiUrl?: string;
+
+  @ApiPropertyOptional({ example: "api_key_123" })
+  @IsOptional()
+  @IsString()
+  apiKey?: string;
+
+  @ApiPropertyOptional({ example: "secret_123" })
+  @IsOptional()
+  @IsString()
+  secretKey?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
   isActive?: boolean;
 }
 

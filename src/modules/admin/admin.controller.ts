@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from "@nestjs/common";
+﻿import { Controller, Get, Post, Patch, Delete, Body, Param, UseGuards } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiBearerAuth } from "@nestjs/swagger";
 import { AdminService } from "./admin.service";
 import {
@@ -8,6 +8,7 @@ import {
   SendBroadcastDto,
   ToggleCourierHealthDto,
   UpdateMasterCourierDto,
+  CreateCourierGatewayDto,
   TestCourierConnectionDto,
 } from "./dto/admin.dto";
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
@@ -47,6 +48,18 @@ export class AdminController {
   @Get("couriers/health")
   @ResponseMessage("Courier health retrieved")
   getCourierHealth() { return this.adminService.getCourierHealth(); }
+
+  @Post("couriers")
+  @ResponseMessage("New courier gateway registered")
+  addCourierGateway(@Body() dto: CreateCourierGatewayDto) {
+    return this.adminService.addCourierGateway(dto);
+  }
+
+  @Delete("couriers/:provider")
+  @ResponseMessage("Courier gateway removed")
+  deleteCourierGateway(@Param("provider") provider: string) {
+    return this.adminService.deleteCourierGateway(provider);
+  }
 
   @Post("couriers/credentials")
   @ResponseMessage("Master courier credentials updated")
