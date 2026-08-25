@@ -115,6 +115,18 @@ export class AdminCouriersService {
           }
         } catch {}
       }
+    } else if (provider.toLowerCase() === "pathao") {
+      try {
+        const res = await fetch("https://api-hermes.pathao.com/aladdin/api/v1/issue-token", { method: "POST" });
+        const latency = Date.now() - start;
+        if (res.status < 500) {
+          await this.prisma.courierHealthMetric.update({
+            where: { provider },
+            data: { latencyMs: latency, status: CourierHealthStatus.OPERATIONAL, checkedAt: new Date() },
+          });
+          return { success: true, latencyMs: latency, message: `Pathao Hermes Gateway Responsive (${latency}ms)`, timestamp: new Date().toISOString() };
+        }
+      } catch {}
     }
 
     const latency = Date.now() - start || 120;
