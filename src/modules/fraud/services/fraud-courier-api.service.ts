@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../../database/prisma.service";
 import { RiskLevel } from "../../../common/enums";
 import { FraudEvaluationResult, CourierBreakdown } from "../interfaces/fraud-evaluation.interface";

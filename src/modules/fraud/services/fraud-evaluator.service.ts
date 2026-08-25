@@ -91,23 +91,23 @@ export class FraudEvaluatorService {
     const since48h = new Date(Date.now() - 48 * 60 * 60 * 1000);
     const since24h = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recent = await this.prisma.parcel.findMany({
-      where: { OR: [{ recipientPhone: phone }, { recipientPhone: cleanPhone }], createdAt: { gte: since48h } },
+      where: { OR: [{ recipientPhone: phone }, { recipientPhone: cleanPhone }], createdAt: { gte: since48h }, status: { in: ["Pending", "In Transit"] } },
       select: { merchantId: true, createdAt: true },
     });
     const recentOrders48h = recent.length;
     const recentOrders24h = recent.filter((p) => p.createdAt >= since24h).length;
     const distinctMerchantsCount = new Set(recent.map((p) => p.merchantId)).size;
-    return { recentOrders24h, recentOrders48h, distinctMerchantsCount, isHighVelocity: recentOrders48h >= 3 || distinctMerchantsCount >= 2 };
+    return { recentOrders24h, recentOrders48h, distinctMerchantsCount, isHighVelocity: recentOrders48h >= 3 && distinctMerchantsCount >= 2 };
   }
 
   private applyVelocity(res: FraudEvaluationResult, velocity: VelocityStats): FraudEvaluationResult {
     res.velocityStats = velocity;
     if (velocity.isHighVelocity) {
-      res.factors.unshift(`⚠️ ভেলোসিটি অ্যালার্ট: গত ৪৮ ঘণ্টায় ${velocity.distinctMerchantsCount}টি স্টোরে ${velocity.recentOrders48h}টি ক্যাশ অন ডেলিভারি অর্ডার পাওয়া গেছে`);
+      res.factors.unshift(`⚠️ ভেলোসিটি অ্যালার্ট: গত ৪৮ ঘণ্টায় ${velocity.distinctMerchantsCount}টি ভিন্ন স্টোরে ${velocity.recentOrders48h}টি রানিং COD অর্ডার রয়েছে`);
       res.score = Math.min(95, res.score + 35);
       if (res.score >= 70) res.risk = RiskLevel.HIGH_RISK;
       else if (res.score >= 40) res.risk = RiskLevel.MODERATE;
-      res.recommendation = "সতর্কতা: একাধিক স্টোরে ডুপ্লিকেট অর্ডার শনাক্ত হয়েছে। পার্সেল পাঠানোর আগে ডেলিভারি চার্জ অগ্রিম নিন।";
+      res.recommendation = "সতর্কতা: একই সাথে একাধিক স্টোরে পার্সেল বুকিং রয়েছে। ডেলিভারি চার্জ অগ্রিম নিন।";
     }
     return res;
   }

@@ -7,18 +7,9 @@ import {
   UserStatus,
   MerchantStatus,
   PlanTier,
-  CourierProvider,
   RiskLevel,
   ParcelStatus,
-  SettlementStatus,
-  PaymentMethod,
-  TransactionType,
-  TransactionStatus,
-  CourierHealthStatus,
   BlacklistStatus,
-  BroadcastType,
-  BroadcastTarget,
-  NotificationCategory,
 } from "../src/common/enums";
 import * as bcrypt from "bcryptjs";
 
@@ -39,7 +30,7 @@ async function main() {
   const merchantPassword = await bcrypt.hash("Password123!", 10);
 
   // 1. Seed Super Admin
-  const superAdmin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@parcelguard.com" },
     update: {},
     create: {
@@ -93,31 +84,32 @@ async function main() {
     },
   });
 
-  // 3. Seed RedX 5 parcels for 01567823568 (Safe 100% customer)
-  const redxCustomerPhone = "01567823568";
-  for (let i = 1; i <= 5; i++) {
+  // 3. Seed 30 orders for 01911391441 (28 Delivered, 2 Cancelled via RedX)
+  const elitePhone = "01911391441";
+  for (let i = 1; i <= 30; i++) {
+    const isDelivered = i <= 28;
     await prisma.parcel.upsert({
-      where: { trackingId: `PG-REDX-${i}` },
+      where: { trackingId: `PG-ELITE-${i}` },
       update: {},
       create: {
-        trackingId: `PG-REDX-${i}`,
-        consignmentId: `RX-990${i}`,
+        trackingId: `PG-ELITE-${i}`,
+        consignmentId: `RX-ELITE-${i}`,
         merchantId: merchantProfile.id,
-        recipientName: "Customer 01567823568",
-        recipientPhone: redxCustomerPhone,
-        recipientAddress: "Dhanmondi, Dhaka",
+        recipientName: "Customer 01911391441",
+        recipientPhone: elitePhone,
+        recipientAddress: "Gulshan-2, Dhaka",
         district: "Dhaka",
-        area: "Dhanmondi",
-        productTitle: `Delivered Fashion Item ${i}`,
-        category: "Apparel",
-        weightKg: 0.8,
+        area: "Gulshan",
+        productTitle: `Order Item ${i}`,
+        category: "Electronics",
+        weightKg: 1.0,
         courier: "RedX",
-        codAmount: 1800,
+        codAmount: 2500,
         deliveryCharge: 120,
-        status: ParcelStatus.DELIVERED,
+        status: isDelivered ? ParcelStatus.DELIVERED : ParcelStatus.CANCELLED,
         riskLevel: RiskLevel.SAFE,
-        riskScore: 10,
-        dateStr: "20 Aug 2026",
+        riskScore: 8,
+        dateStr: "15 Aug 2026",
       },
     });
   }
@@ -137,7 +129,7 @@ async function main() {
     });
   }
 
-  console.log("Database seeded successfully with 6-courier live test records!");
+  console.log("Database seeded successfully with 30 orders for 01911391441!");
 }
 
 main()
