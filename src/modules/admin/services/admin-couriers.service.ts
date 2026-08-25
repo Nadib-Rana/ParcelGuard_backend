@@ -131,7 +131,8 @@ export class AdminCouriersService {
       const token = record?.apiKey || process.env.REDX_API_TOKEN;
       if (token) {
         try {
-          const res = await fetch("https://sandbox.redx.com.bd/v1.0.0-beta/areas", {
+          const baseUrl = process.env.REDX_BASE_URL || "https://openapi.redx.com.bd/v1.0.0-beta";
+          const res = await fetch(`${baseUrl}/areas`, {
             headers: { "API-ACCESS-TOKEN": `Bearer ${token}`, "Content-Type": "application/json" },
           });
           const latency = Date.now() - start;
@@ -140,7 +141,7 @@ export class AdminCouriersService {
               where: { provider },
               data: { latencyMs: latency, status: CourierHealthStatus.OPERATIONAL, checkedAt: new Date() },
             });
-            return { success: true, latencyMs: latency, message: `RedX Live Gateway Responsive (${latency}ms)`, timestamp: new Date().toISOString() };
+            return { success: true, latencyMs: latency, message: `RedX Production Gateway Responsive (${latency}ms)`, timestamp: new Date().toISOString() };
           }
         } catch {}
       }
