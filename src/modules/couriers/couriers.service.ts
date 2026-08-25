@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+﻿import { Injectable, NotFoundException } from "@nestjs/common";
 import { PrismaService } from "../../database/prisma.service";
 import {
   SteadfastAdapter,
@@ -9,6 +9,7 @@ import {
 import { CourierRatesQueryDto, ConnectCourierDto } from "./dto/courier.dto";
 import { ICourierAdapter } from "./interfaces/courier-adapter.interface";
 import { CourierProvider } from "../../common/enums";
+import { CourierSyncService } from "./services/courier-sync.service";
 
 @Injectable()
 export class CouriersService {
@@ -20,6 +21,7 @@ export class CouriersService {
     private readonly pathao: PathaoAdapter,
     private readonly redx: RedXAdapter,
     private readonly paperfly: PaperflyAdapter,
+    private readonly syncService: CourierSyncService,
   ) {
     this.adapters.set(CourierProvider.STEADFAST, this.steadfast);
     this.adapters.set(CourierProvider.PATHAO, this.pathao);
@@ -28,11 +30,7 @@ export class CouriersService {
   }
 
   getAdapter(provider: string): ICourierAdapter {
-    const adapter = this.adapters.get(provider);
-    if (!adapter) {
-      return this.steadfast; // fallback default
-    }
-    return adapter;
+    return this.adapters.get(provider) || this.steadfast;
   }
 
   calculateLiveRates(query: CourierRatesQueryDto) {
@@ -46,7 +44,6 @@ export class CouriersService {
         }),
       );
     }
-    // Sort by total charge ascending (cheapest first)
     return results.sort((a, b) => a.total - b.total);
   }
 
@@ -55,7 +52,6 @@ export class CouriersService {
       where: { userId },
       include: { courierAccounts: true },
     });
-
     if (!merchant) throw new NotFoundException("Merchant not found");
 
     const defaultCouriers = [
@@ -76,66 +72,49 @@ export class CouriersService {
         balance: existing ? existing.currentBalance : 0,
         apiKey: existing?.apiKey || "",
         webhookEnabled: existing ? existing.webhookEnabled : false,
-        sync: existing?.lastSyncedAt ? "Just now" : "—",
+        sync: existing?.lastSyncedAt ? "Just now" : "--",
       };
     });
   }
 
   async connectCourier(userId: string, dto: ConnectCourierDto) {
-    const merchant = await this.prisma.merchantProfile.findUnique({
-      where: { userId },
-    });
+    const merchant = await this.prisma.merchantProfile.findUnique({ where: { userId } });
     if (!merchant) throw new NotFoundException("Merchant not found");
 
-    return this.prisma.courierAccount.upsert({
-      where: {
-        merchantId_provider: {
-          merchantId: merchant.id,
-          provider: dto.provider,
-        },
-      },
-      update: {
-        apiKey: dto.apiKey,
-        secretKey: dto.secretKey,
-        merchantCourierId: dto.merchantCourierId,
-        isConnected: true,
-        lastSyncedAt: new Date(),
-      },
-      create: {
-        merchantId: merchant.id,
-        provider: dto.provider,
-        apiKey: dto.apiKey,
-        secretKey: dto.secretKey,
-        merchantCourierId: dto.merchantCourierId,
-        isConnected: true,
-        lastSyncedAt: new Date(),
-      },
+    const account = await this.prisma.courierAccount.upsert({
+      where: { merchantId_provider: { merchantId: merchant.id, provider: dto.provider } },
+      update: { apiKey: dto.apiKey, secretKey: dto.secretKey, merchantCourierId: dto.merchantCourierId, isConnected: true, lastSyncedAt: new Date() },
+      create: { merchantId: merchant.id, provider: dto.provider, apiKey: dto.apiKey, secretKey: dto.secretKey, merchantCourierId: dto.merchantCourierId, isConnected: true, lastSyncedAt: new Date() },
     });
+
+    // Auto-sync courier on connection
+    void this.syncService.syncMerchantCourier(merchant.id, dto.provider as CourierProvider, dto.apiKey, dto.secretKey);
+    return account;
+  }
+
+  async syncCourier(userId: string, provider: string) {
+    const merchant = await this.prisma.merchantProfile.findUnique({ where: { userId } });
+    if (!merchant) throw new NotFoundException("Merchant not found");
+
+    const account = await this.prisma.courierAccount.findUnique({
+      where: { merchantId_provider: { merchantId: merchant.id, provider } },
+    });
+    if (!account) throw new NotFoundException("Courier account not found");
+
+    return this.syncService.syncMerchantCourier(merchant.id, provider as CourierProvider, account.apiKey || undefined, account.secretKey || undefined);
   }
 
   async toggleCourier(userId: string, provider: string) {
-    const merchant = await this.prisma.merchantProfile.findUnique({
-      where: { userId },
-    });
+    const merchant = await this.prisma.merchantProfile.findUnique({ where: { userId } });
     if (!merchant) throw new NotFoundException("Merchant not found");
 
     const existing = await this.prisma.courierAccount.findUnique({
-      where: {
-        merchantId_provider: {
-          merchantId: merchant.id,
-          provider,
-        },
-      },
+      where: { merchantId_provider: { merchantId: merchant.id, provider } },
     });
 
     if (!existing) {
       return this.prisma.courierAccount.create({
-        data: {
-          merchantId: merchant.id,
-          provider,
-          isConnected: true,
-          lastSyncedAt: new Date(),
-        },
+        data: { merchantId: merchant.id, provider, isConnected: true, lastSyncedAt: new Date() },
       });
     }
 

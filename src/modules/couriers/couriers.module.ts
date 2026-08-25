@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common";
+﻿import { Module } from "@nestjs/common";
 import { CouriersService } from "./couriers.service";
 import { CouriersController } from "./couriers.controller";
 import {
@@ -7,6 +7,7 @@ import {
   RedXAdapter,
   PaperflyAdapter,
 } from "./adapters/couriers.adapters";
+import { CourierSyncService } from "./services/courier-sync.service";
 
 @Module({
   controllers: [CouriersController],
@@ -16,6 +17,7 @@ import {
     PathaoAdapter,
     RedXAdapter,
     PaperflyAdapter,
+    CourierSyncService,
   ],
   exports: [
     CouriersService,
@@ -23,6 +25,7 @@ import {
     PathaoAdapter,
     RedXAdapter,
     PaperflyAdapter,
+    CourierSyncService,
   ],
 })
 export class CouriersModule {}

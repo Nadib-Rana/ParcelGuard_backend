@@ -1,4 +1,4 @@
-import {
+﻿import {
   Controller,
   Get,
   Post,
@@ -16,7 +16,6 @@ import { CourierRatesQueryDto, ConnectCourierDto, ToggleCourierDto } from "./dto
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ResponseMessage } from "../../common/decorators/response-message.decorator";
-import { Public } from "../../common/decorators/public.decorator";
 
 @ApiTags("Couriers & Rates")
 @Controller("couriers")
@@ -43,12 +42,24 @@ export class CouriersController {
   @ApiBearerAuth("bearer")
   @Post("connect")
   @ApiOperation({ summary: "Connect or update courier API credentials" })
-  @ResponseMessage("Courier account updated")
+  @ResponseMessage("Courier account updated and sync initiated")
   connectCourier(
     @CurrentUser("id") userId: string,
     @Body() dto: ConnectCourierDto,
   ) {
     return this.couriersService.connectCourier(userId, dto);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("bearer")
+  @Post("sync")
+  @ApiOperation({ summary: "Manually sync courier account balance and parcel history" })
+  @ResponseMessage("Courier sync completed")
+  syncCourier(
+    @CurrentUser("id") userId: string,
+    @Body("provider") provider: string,
+  ) {
+    return this.couriersService.syncCourier(userId, provider);
   }
 
   @UseGuards(JwtAuthGuard)
