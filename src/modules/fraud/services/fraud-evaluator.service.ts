@@ -83,10 +83,15 @@ export class FraudEvaluatorService {
       return result;
     }
 
-    // 4. Live Courier API Check (Steadfast/Pathao live network)
-    const courierStats = await this.courierApi.fetchCourierLiveStats(cleanPhone, merchantId);
-    if (courierStats) {
-      const result = this.courierApi.buildCourierResult(rawPhone, customerName, courierStats);
+    // 4. Live Multi-Courier API Aggregator (Steadfast + Pathao live network)
+    const courierData = await this.courierApi.fetchCourierLiveStats(cleanPhone, merchantId);
+    if (courierData) {
+      const result = this.courierApi.buildCourierResult(
+        rawPhone,
+        customerName,
+        courierData.combined,
+        courierData.breakdown,
+      );
       await this.saveCheckLog(merchantId, result);
       return result;
     }

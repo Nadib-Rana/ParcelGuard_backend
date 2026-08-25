@@ -1,4 +1,12 @@
-﻿export interface FraudEvaluationResult {
+﻿export interface CourierBreakdown {
+  provider: string;
+  totalParcels: number;
+  delivered: number;
+  cancelled: number;
+  deliveryRatio: number;
+}
+
+export interface FraudEvaluationResult {
   phone: string;
   name: string;
   risk: string;
@@ -11,4 +19,5 @@
   successRate: string;
   factors: string[];
   recommendation: string;
+  courierBreakdown?: CourierBreakdown[];
 }
