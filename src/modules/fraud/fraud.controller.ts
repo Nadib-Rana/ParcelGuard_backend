@@ -1,10 +1,9 @@
-import {
+﻿import {
   Controller,
   Post,
   Get,
   Body,
   UseGuards,
-  Query,
 } from "@nestjs/common";
 import {
   ApiTags,
@@ -16,13 +15,27 @@ import { CheckPhoneRiskDto, BatchScanRiskDto, ReportFraudDto } from "./dto/fraud
 import { JwtAuthGuard } from "../../common/guards/jwt-auth.guard";
 import { CurrentUser } from "../../common/decorators/current-user.decorator";
 import { ResponseMessage } from "../../common/decorators/response-message.decorator";
-import { Public } from "../../common/decorators/public.decorator";
+import { PrismaService } from "../../database/prisma.service";
 
 @ApiTags("Fraud Prevention")
 @Controller("fraud")
 export class FraudController {
-  constructor(private readonly fraudService: FraudService) {}
+  constructor(
+    private readonly fraudService: FraudService,
+    private readonly prisma: PrismaService,
+  ) {}
 
+  private async getMerchantId(userId?: string): Promise<string | undefined> {
+    if (!userId) return undefined;
+    const profile = await this.prisma.merchantProfile.findUnique({
+      where: { userId },
+      select: { id: true },
+    });
+    return profile?.id;
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("bearer")
   @Post("check-phone")
   @ApiOperation({ summary: "Evaluate fraud & return risk score for a single mobile number" })
   @ResponseMessage("Phone risk evaluated successfully")
@@ -30,9 +43,12 @@ export class FraudController {
     @Body() dto: CheckPhoneRiskDto,
     @CurrentUser("id") userId?: string,
   ) {
-    return this.fraudService.evaluatePhoneRisk(dto);
+    const merchantId = await this.getMerchantId(userId);
+    return this.fraudService.evaluatePhoneRisk(dto, merchantId);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth("bearer")
   @Post("batch-scan")
   @ApiOperation({ summary: "Batch evaluate fraud risk for multiple mobile numbers" })
   @ResponseMessage("Batch scan completed")
@@ -40,7 +56,8 @@ export class FraudController {
     @Body() dto: BatchScanRiskDto,
     @CurrentUser("id") userId?: string,
   ) {
-    return this.fraudService.batchScan(dto);
+    const merchantId = await this.getMerchantId(userId);
+    return this.fraudService.batchScan(dto, merchantId);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -52,15 +69,17 @@ export class FraudController {
     @Body() dto: ReportFraudDto,
     @CurrentUser("id") userId?: string,
   ) {
-    return this.fraudService.reportFraud(dto);
+    const merchantId = await this.getMerchantId(userId);
+    return this.fraudService.reportFraud(dto, merchantId);
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth("bearer")
   @Get("recent-checks")
-  @ApiOperation({ summary: "Get recent fraud checks history" })
+  @ApiOperation({ summary: "Get recent fraud checks history from database" })
   @ResponseMessage("Recent checks retrieved")
-  async getRecentChecks() {
-    return this.fraudService.getRecentChecks();
+  async getRecentChecks(@CurrentUser("id") userId?: string) {
+    const merchantId = await this.getMerchantId(userId);
+    return this.fraudService.getRecentChecks(merchantId);
   }
 }

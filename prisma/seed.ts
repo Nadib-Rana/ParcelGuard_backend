@@ -286,6 +286,81 @@ async function main() {
   }
   console.log(`Seeded App Notifications`);
 
+  // 12. Seed Recent Fraud Check Logs
+  const fraudLogs = [
+    {
+      merchantId: merchantProfile.id,
+      phone: "01933445566",
+      name: "Karim Hasan",
+      riskScore: 88,
+      riskCategory: RiskLevel.HIGH_RISK,
+      successRate: "37.5%",
+      totalOrdersFound: 8,
+      deliveredFound: 3,
+      returnedFound: 4,
+      cancelledFound: 1,
+      factors: [
+        "Low completion rate (<40%) in your merchant records",
+        "Customer marked on your flagged watchlist",
+        "Frequent delivery returns/refusals",
+      ],
+      recommendation: "Request advance delivery payment (BDT 150-200) before dispatch.",
+    },
+    {
+      merchantId: merchantProfile.id,
+      phone: "01711223344",
+      name: "Anisur Rahman",
+      riskScore: 12,
+      riskCategory: RiskLevel.SAFE,
+      successRate: "100%",
+      totalOrdersFound: 8,
+      deliveredFound: 8,
+      returnedFound: 0,
+      cancelledFound: 0,
+      factors: ["Verified delivery record with your store", "Active mobile subscriber"],
+      recommendation: "Safe to ship with standard Cash on Delivery.",
+    },
+    {
+      merchantId: merchantProfile.id,
+      phone: "01644556677",
+      name: "Nusrat Jahan",
+      riskScore: 54,
+      riskCategory: RiskLevel.MODERATE,
+      successRate: "60.0%",
+      totalOrdersFound: 5,
+      deliveredFound: 3,
+      returnedFound: 2,
+      cancelledFound: 0,
+      factors: ["Moderate completion history (40%-70%)", "1-2 returns noted in recent history"],
+      recommendation: "Call customer to re-confirm order before booking.",
+    },
+    {
+      merchantId: merchantProfile.id,
+      phone: "01799887766",
+      name: "Rafiqul Islam",
+      riskScore: 95,
+      riskCategory: RiskLevel.HIGH_RISK,
+      successRate: "0.0%",
+      totalOrdersFound: 14,
+      deliveredFound: 0,
+      returnedFound: 14,
+      cancelledFound: 0,
+      factors: [
+        "Nationwide Blacklist: Serial parcel rejector across multiple e-commerce merchants",
+        "Reported by 8 other merchants",
+        "Critical parcel refusal risk",
+      ],
+      recommendation: "HIGH RISK: Reject Cash on Delivery or request full payment in advance.",
+    },
+  ];
+
+  for (const f of fraudLogs) {
+    await prisma.fraudCheckLog.create({
+      data: f,
+    });
+  }
+  console.log(`Seeded Recent Fraud Check Logs`);
+
   console.log("ParcelGuard database seeding completed successfully!");
 }
 

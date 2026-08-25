@@ -39,10 +39,30 @@ export class FraudReportingService {
   }
 
   async getRecentChecks(merchantId?: string) {
-    return this.prisma.fraudCheckLog.findMany({
+    const logs = await this.prisma.fraudCheckLog.findMany({
       where: merchantId ? { merchantId } : {},
       orderBy: { createdAt: "desc" },
       take: 20,
     });
+
+    return logs.map((l) => ({
+      id: l.id,
+      phone: l.phone,
+      name: l.name || "Customer",
+      risk: l.riskCategory,
+      score: l.riskScore,
+      date: l.createdAt.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      }),
+      totalOrders: l.totalOrdersFound,
+      delivered: l.deliveredFound,
+      returned: l.returnedFound,
+      cancelled: l.cancelledFound,
+      successRate: l.successRate,
+      factors: (l.factors as string[]) || [],
+      recommendation: l.recommendation || "",
+    }));
   }
 }
