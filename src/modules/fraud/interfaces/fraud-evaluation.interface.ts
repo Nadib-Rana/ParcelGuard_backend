@@ -6,6 +6,13 @@
   deliveryRatio: number;
 }
 
+export interface VelocityStats {
+  recentOrders24h: number;
+  recentOrders48h: number;
+  distinctMerchantsCount: number;
+  isHighVelocity: boolean;
+}
+
 export interface FraudEvaluationResult {
   phone: string;
   name: string;
@@ -20,4 +27,5 @@ export interface FraudEvaluationResult {
   factors: string[];
   recommendation: string;
   courierBreakdown?: CourierBreakdown[];
+  velocityStats?: VelocityStats;
 }
