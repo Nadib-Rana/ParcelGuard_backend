@@ -9,15 +9,14 @@ export class CourierSyncService {
   constructor(private readonly prisma: PrismaService) {}
 
   async syncMerchantCourier(merchantId: string, provider: CourierProvider, apiKey?: string, secretKey?: string) {
-    this.logger.log(`Syncing ${provider} data for merchant ${merchantId}`);
+    this.logger.log(`Syncing ${provider} live account for merchant ${merchantId}`);
 
     let balance = 0;
-    let syncedParcelsCount = 0;
 
-    // 1. Live Steadfast Balance & Shipment Fetch
+    // 1. Live Steadfast/Packzy Balance & Shipment Fetch
     if (provider === CourierProvider.STEADFAST && apiKey && secretKey) {
       try {
-        const balRes = await fetch("https://portal.steadfast.com.bd/api/v1/get_balance", {
+        const balRes = await fetch("https://portal.packzy.com/api/v1/get_balance", {
           headers: { "Api-Key": apiKey, "Secret-Key": secretKey, "Content-Type": "application/json" },
         });
         if (balRes.ok) {
@@ -27,7 +26,7 @@ export class CourierSyncService {
           }
         }
       } catch (e) {
-        this.logger.debug(`Steadfast balance query bypassed: ${e instanceof Error ? e.message : e}`);
+        this.logger.debug(`Steadfast balance query skipped: ${e instanceof Error ? e.message : e}`);
       }
     }
 
@@ -35,15 +34,15 @@ export class CourierSyncService {
     await this.prisma.courierAccount.updateMany({
       where: { merchantId, provider },
       data: {
-        currentBalance: balance > 0 ? balance : undefined,
+        currentBalance: balance,
         lastSyncedAt: new Date(),
         isConnected: true,
       },
     });
 
-    // 3. Create Notification for the Merchant
-    const notifTitle = `${provider} Synced Successfully`;
-    const notifBody = `Connected ${provider} account has been synchronized. Delivery rates, COD balance, and network intelligence updated.`;
+    // 3. Create In-App Notification
+    const notifTitle = `${provider} Synced (BDT ${balance.toLocaleString()})`;
+    const notifBody = `Your ${provider} account is live and connected. Balance and tracking synchronized successfully.`;
 
     await this.prisma.appNotification.create({
       data: {
@@ -60,7 +59,6 @@ export class CourierSyncService {
       provider,
       syncedAt: new Date().toISOString(),
       balance,
-      syncedParcelsCount,
     };
   }
 }

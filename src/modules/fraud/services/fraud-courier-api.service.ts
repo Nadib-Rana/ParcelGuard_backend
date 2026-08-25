@@ -61,7 +61,7 @@ export class FraudCourierApiService {
       if (provider === "Steadfast") {
         const keys = await this.getCredentials(merchantId, "Steadfast");
         if (keys.apiKey && keys.secretKey) {
-          const res = await fetch(`https://portal.steadfast.com.bd/api/v1/fraud-check/${phone}`, {
+          const res = await fetch(`https://portal.packzy.com/api/v1/fraud_check/${phone}`, {
             headers: { "Api-Key": keys.apiKey, "Secret-Key": keys.secretKey, "Content-Type": "application/json" },
           });
           if (res.ok) {
