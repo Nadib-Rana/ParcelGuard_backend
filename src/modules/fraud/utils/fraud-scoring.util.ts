@@ -1,5 +1,5 @@
 ﻿import { RiskLevel } from "../../../common/enums";
-import { FraudEvaluationResult } from "../interfaces/fraud-evaluation.interface";
+import { FraudEvaluationResult, CourierBreakdown } from "../interfaces/fraud-evaluation.interface";
 
 export class FraudScoringUtil {
   static evaluateLocalCustomer(
@@ -7,31 +7,27 @@ export class FraudScoringUtil {
     customerName: string,
     customer: any,
   ): FraudEvaluationResult {
-    const orders = customer.ordersCount || 1;
+    const orders = customer.ordersCount || 0;
     const delivered = customer.deliveredCount || 0;
     const returned = customer.returnedCount || 0;
     const cancelled = customer.cancelledCount || 0;
-    const rateNum = orders > 0 ? (delivered / orders) * 100 : 50;
+    const rateNum = orders > 0 ? (delivered / orders) * 100 : 100;
 
-    let score = 15;
+    let score = 10;
     let risk: string = RiskLevel.SAFE;
-    let factors = ["Verified delivery record with your store", "Active mobile subscriber"];
-    let recommendation = "Safe to ship with standard Cash on Delivery.";
+    let factors = ["আপনার স্টোরে সফল ডেলিভারি রেকর্ড রয়েছে", "সচল মোবাইল অপারেটর"];
+    let recommendation = "ঝুঁকি মুক্ত: নিশ্চিন্তে ক্যাশ অন ডেলিভারিতে পার্সেল পাঠাতে পারেন।";
 
     if (rateNum < 40 || customer.isWatchlist) {
       score = 84;
       risk = RiskLevel.HIGH_RISK;
-      factors = [
-        "Low completion rate (<40%) in your merchant records",
-        "Customer marked on your flagged watchlist",
-        "Frequent delivery returns/refusals",
-      ];
-      recommendation = "Request advance delivery payment before dispatch.";
+      factors = ["আপনার মার্চেন্ট রেকর্ডে নিম্ন ডেলিভারি হার (<৪০%)", "কাস্টমার ফ্ল্যাগড ওয়াচলিস্টে রয়েছে", "ঘনঘন পার্সেল রিজেকশনের ইতিহাস রয়েছে"];
+      recommendation = "উচ্চ বাতিল ঝুঁকি: পার্সেল পাঠানোর পূর্বে অগ্রিম ডেলিভারি চার্জ নিশ্চিত করুন।";
     } else if (rateNum < 70) {
       score = 52;
       risk = RiskLevel.MODERATE;
-      factors = ["Moderate completion history (40%-70%)", "1-2 returns noted in recent history"];
-      recommendation = "Call customer to re-confirm order before booking.";
+      factors = ["মাঝারি ডেলিভারি ইতিহাস (৪০%-৭০%)", "বিগত অর্ডারে রিটার্ন রেকর্ড রয়েছে"];
+      recommendation = "মাঝারি ঝুঁকি: বুকিং করার পূর্বে কাস্টমারকে ফোন করে কনফার্ম করুন।";
     }
 
     return {
@@ -59,31 +55,37 @@ export class FraudScoringUtil {
     const delivered = crossParcels.filter((p) => p.status === "Delivered").length;
     const returned = crossParcels.filter((p) => p.status === "Returned").length;
     const cancelled = crossParcels.filter((p) => p.status === "Cancelled").length;
-    const rateNum = (delivered / total) * 100;
+    const rateNum = total > 0 ? (delivered / total) * 100 : 100;
 
-    let score = 14;
+    let score = 10;
     let risk: string = RiskLevel.SAFE;
-    let factors = ["Known courier recipient across network", "Clean delivery track record"];
-    let recommendation = "Safe to proceed with Cash on Delivery.";
+    let factors = ["সারা দেশের কুরিয়ার নেটওয়ার্কে নির্ভরযোগ্য গ্রহীতা", "সফল ডেলিভারি ট্র্যাক রেকর্ড"];
+    let recommendation = "ঝুঁকি মুক্ত: নিশ্চিন্তে ক্যাশ অন ডেলিভারিতে পার্সেল পাঠাতে পারেন।";
 
     if (rateNum < 45 || returned > delivered) {
       score = 82;
       risk = RiskLevel.HIGH_RISK;
-      factors = [
-        `High cross-merchant return ratio (${returned}/${total} orders returned)`,
-        "Multiple parcel refusals at doorstep",
-      ];
-      recommendation = "Collect advance delivery charge before dispatch.";
+      factors = [`উচ্চ রিটার্ন অনুপাত (${returned}/${total} টি পার্সেল বাতিল)`, "ডেলিভারি ম্যানকে একাধিকবার ফেরত পাঠানোর রেকর্ড রয়েছে"];
+      recommendation = "উচ্চ বাতিল ঝুঁকি: পার্সেল পাঠানোর পূর্বে ডেলিভারি চার্জ অগ্রিম নিন।";
     } else if (rateNum < 75) {
       score = 48;
       risk = RiskLevel.MODERATE;
-      factors = ["Occasional delivery delays", "Mixed delivery history across merchants"];
-      recommendation = "Re-confirm delivery address before dispatch.";
+      factors = ["মাঝারি ডেলিভারি হার", "কুরিয়ার ট্র্যাকিংয়ে কিছু বিলম্ব ও রিটার্ন রয়েছে"];
+      recommendation = "মাঝারি ঝুঁকি: অর্ডার ডিসপ্যাচের পূর্বে ঠিকানা নিশ্চিত করুন।";
     }
+
+    // Build actual courier distribution from crossParcels
+    const breakdown: CourierBreakdown[] = ["Steadfast", "Pathao", "RedX", "Paperfly", "ParcelDex", "CarryBee"].map((c) => {
+      const matched = crossParcels.filter((p) => p.courier?.toLowerCase() === c.toLowerCase());
+      const d = matched.filter((p) => p.status === "Delivered").length;
+      const ret = matched.filter((p) => p.status === "Returned" || p.status === "Cancelled").length;
+      const ratio = matched.length > 0 ? Math.round((d / matched.length) * 1000) / 10 : 0;
+      return { provider: c, totalParcels: matched.length, delivered: d, cancelled: ret, deliveryRatio: ratio };
+    });
 
     return {
       phone: rawPhone,
-      name: crossParcels[0].recipientName || customerName,
+      name: crossParcels[0]?.recipientName || customerName,
       risk,
       score,
       date: "Just now",
@@ -94,6 +96,7 @@ export class FraudScoringUtil {
       successRate: `${rateNum.toFixed(1)}%`,
       factors,
       recommendation,
+      courierBreakdown: breakdown,
     };
   }
 
@@ -102,60 +105,23 @@ export class FraudScoringUtil {
     cleanPhone: string,
     customerName: string,
   ): FraudEvaluationResult {
-    const isRiskyPattern =
-      cleanPhone.endsWith("78") || cleanPhone.endsWith("12") || cleanPhone.endsWith("00");
-    const isModeratePattern = cleanPhone.endsWith("55") || cleanPhone.endsWith("33");
-
-    if (isRiskyPattern) {
-      return {
-        phone: rawPhone,
-        name: customerName,
-        risk: RiskLevel.HIGH_RISK,
-        score: 79,
-        date: "Just now",
-        totalOrders: 16,
-        delivered: 5,
-        returned: 9,
-        cancelled: 2,
-        successRate: "31.2%",
-        factors: [
-          "High return pattern detected in courier telemetry",
-          "Repeated cancellation history in regional hubs",
-        ],
-        recommendation: "Collect advance shipping fee before booking parcel.",
-      };
-    }
-
-    if (isModeratePattern) {
-      return {
-        phone: rawPhone,
-        name: customerName,
-        risk: RiskLevel.MODERATE,
-        score: 46,
-        date: "Just now",
-        totalOrders: 6,
-        delivered: 4,
-        returned: 2,
-        cancelled: 0,
-        successRate: "66.7%",
-        factors: ["New customer with limited history", "Inter-district delivery route"],
-        recommendation: "Confirm delivery address before shipping.",
-      };
-    }
-
+    // When 0 orders exist in courier databases
     return {
       phone: rawPhone,
       name: customerName,
       risk: RiskLevel.SAFE,
-      score: 14,
+      score: 10,
       date: "Just now",
-      totalOrders: 8,
-      delivered: 7,
-      returned: 1,
+      totalOrders: 0,
+      delivered: 0,
+      returned: 0,
       cancelled: 0,
-      successRate: "87.5%",
-      factors: ["Clean delivery track record", "Active mobile number"],
-      recommendation: "Safe to ship with Cash on Delivery.",
+      successRate: "100%",
+      factors: [
+        "নতুন গ্রাহক: কোনো পূর্ববর্তী রিটার্ন বা ফ্রড রেকর্ড নেই",
+        "সচল ও সক্রিয় বাংলাদেশি মোবাইল নম্বর",
+      ],
+      recommendation: "ঝুঁকি মুক্ত: এই কাস্টমারকে নিশ্চিন্তে পার্সেল দিতে পারেন।",
     };
   }
 }

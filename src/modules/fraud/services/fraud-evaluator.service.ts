@@ -16,11 +16,16 @@ export class FraudEvaluatorService {
   ) {}
 
   normalizePhone(phone: string): string {
-    const digits = phone.replace(/\D/g, "");
-    if (digits.startsWith("880") && digits.length === 13) return `0${digits.slice(3)}`;
-    if (digits.startsWith("880")) return digits.slice(2);
-    if (digits.startsWith("0")) return digits;
-    return `0${digits}`;
+    let digits = phone.replace(/\D/g, "");
+    if (digits.startsWith("880") && digits.length >= 13) digits = digits.slice(3);
+    else if (digits.startsWith("880") && digits.length === 12) digits = digits.slice(2);
+    if (digits.length > 11) {
+      if (!digits.startsWith("0")) digits = "0" + digits;
+      digits = digits.slice(0, 11);
+    } else if (!digits.startsWith("0") && digits.length > 0) {
+      digits = `0${digits}`;
+    }
+    return digits;
   }
 
   async evaluate(dto: CheckPhoneRiskDto, merchantId?: string): Promise<FraudEvaluationResult> {
@@ -37,18 +42,36 @@ export class FraudEvaluatorService {
       where: { OR: [{ phone: cleanPhone }, { phone: rawPhone }] },
     });
     if (blacklistHit) {
-      const result = this.buildBlacklistResult(rawPhone, customerName, blacklistHit, velocity, courierData?.breakdown);
+      const result = this.buildBlacklistResult(cleanPhone, customerName, blacklistHit, velocity, courierData?.breakdown);
       await this.saveCheckLog(merchantId, result);
       return result;
     }
 
-    // 2. Merchant Local Directory Check
+    // 2. Multi-Courier Live Aggregator (if parcels found in couriers)
+    if (courierData && courierData.combined.totalParcels > 0) {
+      const result = this.applyVelocity(this.courierApi.buildCourierResult(cleanPhone, customerName, courierData.combined, courierData.breakdown), velocity);
+      await this.saveCheckLog(merchantId, result);
+      return result;
+    }
+
+    // 3. Cross-Merchant Network History
+    const crossParcels = await this.prisma.parcel.findMany({
+      where: { OR: [{ recipientPhone: rawPhone }, { recipientPhone: cleanPhone }] },
+    });
+    if (crossParcels.length > 0) {
+      const res = FraudScoringUtil.evaluateCrossMerchant(cleanPhone, customerName, crossParcels);
+      const result = this.applyVelocity(res, velocity);
+      await this.saveCheckLog(merchantId, result);
+      return result;
+    }
+
+    // 4. Merchant Local Directory Check
     if (merchantId) {
       const localCustomer = await this.prisma.customer.findFirst({
         where: { merchantId, OR: [{ phone: rawPhone }, { phone: cleanPhone }] },
       });
       if (localCustomer) {
-        const res = FraudScoringUtil.evaluateLocalCustomer(rawPhone, customerName, localCustomer);
+        const res = FraudScoringUtil.evaluateLocalCustomer(cleanPhone, customerName, localCustomer);
         res.courierBreakdown = courierData?.breakdown;
         const result = this.applyVelocity(res, velocity);
         await this.saveCheckLog(merchantId, result);
@@ -56,27 +79,8 @@ export class FraudEvaluatorService {
       }
     }
 
-    // 3. Multi-Courier Live Aggregator (if parcels found in couriers)
-    if (courierData && courierData.combined.totalParcels > 0) {
-      const result = this.applyVelocity(this.courierApi.buildCourierResult(rawPhone, customerName, courierData.combined, courierData.breakdown), velocity);
-      await this.saveCheckLog(merchantId, result);
-      return result;
-    }
-
-    // 4. Cross-Merchant Network History
-    const crossParcels = await this.prisma.parcel.findMany({
-      where: { OR: [{ recipientPhone: rawPhone }, { recipientPhone: cleanPhone }] },
-    });
-    if (crossParcels.length > 0) {
-      const res = FraudScoringUtil.evaluateCrossMerchant(rawPhone, customerName, crossParcels);
-      res.courierBreakdown = courierData?.breakdown;
-      const result = this.applyVelocity(res, velocity);
-      await this.saveCheckLog(merchantId, result);
-      return result;
-    }
-
     // 5. Dynamic Heuristic for Brand New Numbers
-    const res = FraudScoringUtil.evaluateHeuristic(rawPhone, cleanPhone, customerName);
+    const res = FraudScoringUtil.evaluateHeuristic(cleanPhone, cleanPhone, customerName);
     res.courierBreakdown = courierData?.breakdown;
     const result = this.applyVelocity(res, velocity);
     await this.saveCheckLog(merchantId, result);
