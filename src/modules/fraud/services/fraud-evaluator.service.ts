@@ -4,12 +4,16 @@ import { CheckPhoneRiskDto } from "../dto/fraud.dto";
 import { RiskLevel } from "../../../common/enums";
 import { FraudEvaluationResult } from "../interfaces/fraud-evaluation.interface";
 import { FraudScoringUtil } from "../utils/fraud-scoring.util";
+import { FraudCourierApiService } from "./fraud-courier-api.service";
 
 @Injectable()
 export class FraudEvaluatorService {
   private readonly logger = new Logger(FraudEvaluatorService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly courierApi: FraudCourierApiService,
+  ) {}
 
   normalizePhone(phone: string): string {
     const digits = phone.replace(/\D/g, "");
@@ -79,7 +83,15 @@ export class FraudEvaluatorService {
       return result;
     }
 
-    // 4. Dynamic Heuristic for New Numbers
+    // 4. Live Courier API Check (Steadfast/Pathao live network)
+    const courierStats = await this.courierApi.fetchCourierLiveStats(cleanPhone, merchantId);
+    if (courierStats) {
+      const result = this.courierApi.buildCourierResult(rawPhone, customerName, courierStats);
+      await this.saveCheckLog(merchantId, result);
+      return result;
+    }
+
+    // 5. Dynamic Heuristic for Brand New Numbers
     const result = FraudScoringUtil.evaluateHeuristic(rawPhone, cleanPhone, customerName);
     await this.saveCheckLog(merchantId, result);
     return result;
