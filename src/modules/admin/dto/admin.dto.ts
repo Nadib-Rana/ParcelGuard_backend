@@ -70,3 +70,31 @@ export class ToggleCourierHealthDto {
   @IsString()
   provider: string;
 }
+
+export class UpdateMasterCourierDto {
+  @ApiProperty({ example: "Steadfast" })
+  @IsNotEmpty()
+  @IsString()
+  provider: string;
+
+  @ApiPropertyOptional({ example: "your_api_key" })
+  @IsOptional()
+  @IsString()
+  apiKey?: string;
+
+  @ApiPropertyOptional({ example: "your_secret_key" })
+  @IsOptional()
+  @IsString()
+  secretKey?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  isActive?: boolean;
+}
+
+export class TestCourierConnectionDto {
+  @ApiProperty({ example: "Steadfast" })
+  @IsNotEmpty()
+  @IsString()
+  provider: string;
+}

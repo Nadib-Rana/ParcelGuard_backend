@@ -44,7 +44,6 @@ export class FraudCourierApiService {
 
   private async fetchProviderStats(provider: string, phone: string, merchantId?: string): Promise<CourierBreakdown | null> {
     try {
-      // 1. Local Network Parcels for this Courier
       const local = await this.prisma.parcel.findMany({
         where: { recipientPhone: { in: [phone, phone.replace(/^0/, ""), `88${phone}`, `+88${phone}`] }, courier: provider },
         select: { status: true },
@@ -57,7 +56,6 @@ export class FraudCourierApiService {
         return { provider, totalParcels: local.length, delivered, cancelled, deliveryRatio: ratio };
       }
 
-      // 2. Live API for Steadfast
       if (provider === "Steadfast") {
         const keys = await this.getCredentials(merchantId, "Steadfast");
         if (keys.apiKey && keys.secretKey) {
@@ -83,15 +81,30 @@ export class FraudCourierApiService {
   }
 
   private async getCredentials(merchantId: string | undefined, provider: string) {
-    let apiKey = process.env.STEADFAST_API_KEY;
-    let secretKey = process.env.STEADFAST_SECRET_KEY;
+    let apiKey: string | null | undefined = undefined;
+    let secretKey: string | null | undefined = undefined;
+
     if (merchantId) {
       const acc = await this.prisma.courierAccount.findUnique({ where: { merchantId_provider: { merchantId, provider } } });
       if (acc?.apiKey && acc?.isConnected) {
         apiKey = acc.apiKey;
-        secretKey = acc.secretKey || secretKey;
+        secretKey = acc.secretKey;
       }
     }
+
+    if (!apiKey) {
+      const master = await this.prisma.courierHealthMetric.findUnique({ where: { provider } });
+      if (master?.apiKey && master?.isActive) {
+        apiKey = master.apiKey;
+        secretKey = master.secretKey;
+      }
+    }
+
+    if (!apiKey && provider === "Steadfast") {
+      apiKey = process.env.STEADFAST_API_KEY;
+      secretKey = process.env.STEADFAST_SECRET_KEY;
+    }
+
     return { apiKey, secretKey };
   }
 
