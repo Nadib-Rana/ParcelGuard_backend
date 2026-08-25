@@ -17,6 +17,7 @@ export class FraudEvaluatorService {
 
   normalizePhone(phone: string): string {
     const digits = phone.replace(/\D/g, "");
+    if (digits.startsWith("880") && digits.length === 13) return `0${digits.slice(3)}`;
     if (digits.startsWith("880")) return digits.slice(2);
     if (digits.startsWith("0")) return digits;
     return `0${digits}`;
@@ -26,15 +27,17 @@ export class FraudEvaluatorService {
     const rawPhone = dto.phone.trim();
     const cleanPhone = this.normalizePhone(rawPhone);
     const customerName = dto.name?.trim() || "Customer";
-    const velocity = await this.calculateVelocity(rawPhone, cleanPhone);
+    const [velocity, courierData] = await Promise.all([
+      this.calculateVelocity(rawPhone, cleanPhone),
+      this.courierApi.fetchCourierLiveStats(cleanPhone, merchantId),
+    ]);
 
     // 1. Global Blacklist Check
     const blacklistHit = await this.prisma.globalBlacklistEntry.findFirst({
       where: { OR: [{ phone: cleanPhone }, { phone: rawPhone }] },
     });
-
     if (blacklistHit) {
-      const result = this.buildBlacklistResult(rawPhone, customerName, blacklistHit, velocity);
+      const result = this.buildBlacklistResult(rawPhone, customerName, blacklistHit, velocity, courierData?.breakdown);
       await this.saveCheckLog(merchantId, result);
       return result;
     }
@@ -45,32 +48,37 @@ export class FraudEvaluatorService {
         where: { merchantId, OR: [{ phone: rawPhone }, { phone: cleanPhone }] },
       });
       if (localCustomer) {
-        const result = this.applyVelocity(FraudScoringUtil.evaluateLocalCustomer(rawPhone, customerName, localCustomer), velocity);
+        const res = FraudScoringUtil.evaluateLocalCustomer(rawPhone, customerName, localCustomer);
+        res.courierBreakdown = courierData?.breakdown;
+        const result = this.applyVelocity(res, velocity);
         await this.saveCheckLog(merchantId, result);
         return result;
       }
     }
 
-    // 3. Cross-Merchant Network History
-    const crossParcels = await this.prisma.parcel.findMany({
-      where: { OR: [{ recipientPhone: rawPhone }, { recipientPhone: cleanPhone }] },
-    });
-    if (crossParcels.length > 0) {
-      const result = this.applyVelocity(FraudScoringUtil.evaluateCrossMerchant(rawPhone, customerName, crossParcels), velocity);
-      await this.saveCheckLog(merchantId, result);
-      return result;
-    }
-
-    // 4. Live Multi-Courier API Aggregator
-    const courierData = await this.courierApi.fetchCourierLiveStats(cleanPhone, merchantId);
-    if (courierData) {
+    // 3. Multi-Courier Live Aggregator (if parcels found in couriers)
+    if (courierData && courierData.combined.totalParcels > 0) {
       const result = this.applyVelocity(this.courierApi.buildCourierResult(rawPhone, customerName, courierData.combined, courierData.breakdown), velocity);
       await this.saveCheckLog(merchantId, result);
       return result;
     }
 
+    // 4. Cross-Merchant Network History
+    const crossParcels = await this.prisma.parcel.findMany({
+      where: { OR: [{ recipientPhone: rawPhone }, { recipientPhone: cleanPhone }] },
+    });
+    if (crossParcels.length > 0) {
+      const res = FraudScoringUtil.evaluateCrossMerchant(rawPhone, customerName, crossParcels);
+      res.courierBreakdown = courierData?.breakdown;
+      const result = this.applyVelocity(res, velocity);
+      await this.saveCheckLog(merchantId, result);
+      return result;
+    }
+
     // 5. Dynamic Heuristic for Brand New Numbers
-    const result = this.applyVelocity(FraudScoringUtil.evaluateHeuristic(rawPhone, cleanPhone, customerName), velocity);
+    const res = FraudScoringUtil.evaluateHeuristic(rawPhone, cleanPhone, customerName);
+    res.courierBreakdown = courierData?.breakdown;
+    const result = this.applyVelocity(res, velocity);
     await this.saveCheckLog(merchantId, result);
     return result;
   }
@@ -100,7 +108,7 @@ export class FraudEvaluatorService {
     return res;
   }
 
-  private buildBlacklistResult(rawPhone: string, name: string, b: any, velocity: VelocityStats): FraudEvaluationResult {
+  private buildBlacklistResult(rawPhone: string, name: string, b: any, velocity: VelocityStats, breakdown?: any[]): FraudEvaluationResult {
     return {
       phone: rawPhone,
       name: b.customerName || name,
@@ -114,6 +122,7 @@ export class FraudEvaluatorService {
       successRate: "16.7%",
       factors: [`Nationwide Blacklist: ${b.reason}`, `Reported by ${b.reportedByCount} merchants`],
       recommendation: "HIGH RISK: Reject Cash on Delivery or request full advance payment.",
+      courierBreakdown: breakdown,
       velocityStats: velocity,
     };
   }
