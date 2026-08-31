@@ -49,8 +49,19 @@ export class FraudCourierApiService {
     };
   }
 
+  private readonly liveStatsCache = new Map<string, { stats: CourierBreakdown; cachedAt: number }>();
+
   private async fetchProviderStats(provider: string, phone: string, merchantId?: string): Promise<CourierBreakdown | null> {
     try {
+      const cacheKey = `${provider.toLowerCase()}_${phone}`;
+      const cached = this.liveStatsCache.get(cacheKey);
+      const TWO_HOURS = 2 * 60 * 60 * 1000;
+
+      if (cached && Date.now() - cached.cachedAt < TWO_HOURS) {
+        this.logger.log(`[Courier Cache] ⚡ Reusing cached live stats for ${provider} - ${phone}`);
+        return cached.stats;
+      }
+
       const local = await this.prisma.parcel.findMany({
         where: { recipientPhone: { in: [phone, phone.replace(/^0/, ""), `88${phone}`, `+88${phone}`] }, courier: provider },
         select: { status: true },
@@ -83,6 +94,9 @@ export class FraudCourierApiService {
               const liveRatio = liveTotal > 0 ? Math.round((liveDelivered / liveTotal) * 1000) / 10 : 100;
               this.logger.log(`[Steadfast Live API] ✅ Parsed Live Stats: Total: ${liveTotal}, Delivered: ${liveDelivered}, Cancelled: ${liveCancelled}, Ratio: ${liveRatio}%`);
             }
+          } else if (res.status === 429) {
+            const data = await res.json().catch(() => null);
+            this.logger.warn(`[Steadfast Live API] ⚠️ Steadfast daily search limit reached (Limit: ${data?.limit || 10}). Please contact Steadfast Support to increase search quota.`);
           } else {
             const errText = await res.text().catch(() => "");
             this.logger.warn(`[Steadfast Live API] ⚠️ Live check failed (HTTP ${res.status}): ${errText}`);
@@ -97,7 +111,12 @@ export class FraudCourierApiService {
       const cancelled = hasLive ? Math.max(liveCancelled, localCancelled) : localCancelled;
       const ratio = total > 0 ? Math.round((delivered / total) * 1000) / 10 : 100;
 
-      return { provider, totalParcels: total, delivered, cancelled, deliveryRatio: ratio };
+      const breakdown: CourierBreakdown = { provider, totalParcels: total, delivered, cancelled, deliveryRatio: ratio };
+      if (hasLive) {
+        this.liveStatsCache.set(cacheKey, { stats: breakdown, cachedAt: Date.now() });
+      }
+
+      return breakdown;
     } catch (e) {
       this.logger.error(`[Courier API] ❌ Error checking ${provider} for phone ${phone}: ${e instanceof Error ? e.message : e}`);
     }
