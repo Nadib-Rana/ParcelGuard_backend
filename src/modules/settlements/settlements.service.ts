@@ -62,6 +62,18 @@ export class SettlementsService {
       },
     });
 
+    // Create in-app payment alert notification
+    await this.prisma.appNotification.create({
+      data: {
+        merchantId,
+        category: "Payments",
+        title: `COD Dispute Raised: ${settlement.settlementCode}`,
+        body: `Dispute ticket submitted for ${settlement.courierProvider} (৳${amount.toLocaleString()} shortage). Reason: ${dto.reason}`,
+        metadata: { settlementId: settlement.id, settlementCode: settlement.settlementCode, amount, reason: dto.reason },
+        isRead: false,
+      },
+    }).catch(() => {});
+
     return this.prisma.settlement.update({
       where: { id: settlement.id },
       data: {
