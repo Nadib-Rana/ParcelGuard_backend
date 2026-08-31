@@ -159,7 +159,27 @@ export class FraudEvaluatorService {
 
   private async saveCheckLog(merchantId: string | undefined, res: FraudEvaluationResult) {
     try {
-      if (merchantId) await this.prisma.merchantProfile.update({ where: { id: merchantId }, data: { fraudChecksUsed: { increment: 1 } } });
+      if (merchantId) {
+        await this.prisma.merchantProfile.update({
+          where: { id: merchantId },
+          data: { fraudChecksUsed: { increment: 1 } },
+        });
+
+        // Trigger in-app notification on High Risk detection
+        if (res.risk === RiskLevel.HIGH_RISK) {
+          await this.prisma.appNotification.create({
+            data: {
+              merchantId,
+              category: "Risk Alerts",
+              title: `High Risk Customer: ${res.phone}`,
+              body: `Customer ${res.name || "Customer"} (${res.phone}) flagged with high return risk (Score: ${res.score}/100, Delivery Rate: ${res.successRate}). ${res.recommendation}`,
+              metadata: { phone: res.phone, score: res.score, risk: res.risk },
+              isRead: false,
+            },
+          });
+        }
+      }
+
       await this.prisma.fraudCheckLog.create({
         data: {
           merchantId: merchantId || null,

@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Delete,
   Param,
   UseGuards,
 } from "@nestjs/common";
@@ -44,5 +45,22 @@ export class NotificationsController {
   @ResponseMessage("All notifications marked as read")
   markAllAsRead(@CurrentUser("id") userId: string) {
     return this.notificationsService.markAllAsRead(userId);
+  }
+
+  @Delete("clear-read")
+  @ApiOperation({ summary: "Clear all read notifications" })
+  @ResponseMessage("All read notifications cleared")
+  clearReadNotifications(@CurrentUser("id") userId: string) {
+    return this.notificationsService.clearReadNotifications(userId);
+  }
+
+  @Delete(":id")
+  @ApiOperation({ summary: "Delete a single notification" })
+  @ResponseMessage("Notification deleted successfully")
+  deleteNotification(
+    @CurrentUser("id") userId: string,
+    @Param("id") id: string,
+  ) {
+    return this.notificationsService.deleteNotification(userId, id);
   }
 }

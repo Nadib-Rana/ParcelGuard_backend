@@ -61,9 +61,59 @@ export class NotificationsService {
   async markAllAsRead(userId: string) {
     const merchantId = await this.getMerchantId(userId);
 
-    return this.prisma.appNotification.updateMany({
+    const res = await this.prisma.appNotification.updateMany({
       where: { merchantId, isRead: false },
       data: { isRead: true },
     });
+
+    return { success: true, count: res.count, message: "All notifications marked as read" };
+  }
+
+  async createNotification(
+    merchantId: string,
+    data: { category?: string; title: string; body: string; metadata?: any },
+  ) {
+    return this.prisma.appNotification.create({
+      data: {
+        merchantId,
+        category: data.category || "System",
+        title: data.title,
+        body: data.body,
+        metadata: data.metadata || undefined,
+        isRead: false,
+      },
+    });
+  }
+
+  async deleteNotification(userId: string, id: string) {
+    const merchantId = await this.getMerchantId(userId);
+
+    const notif = await this.prisma.appNotification.findFirst({
+      where: {
+        merchantId,
+        OR: [
+          { id },
+          !isNaN(Number(id)) ? { numericId: Number(id) } : {},
+        ],
+      },
+    });
+
+    if (!notif) return { success: true };
+
+    await this.prisma.appNotification.delete({
+      where: { id: notif.id },
+    });
+
+    return { success: true, message: "Notification deleted" };
+  }
+
+  async clearReadNotifications(userId: string) {
+    const merchantId = await this.getMerchantId(userId);
+
+    const res = await this.prisma.appNotification.deleteMany({
+      where: { merchantId, isRead: true },
+    });
+
+    return { success: true, count: res.count, message: `${res.count} read notifications cleared` };
   }
 }
