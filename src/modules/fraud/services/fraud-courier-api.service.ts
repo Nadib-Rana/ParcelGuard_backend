@@ -56,33 +56,50 @@ export class FraudCourierApiService {
         select: { status: true },
       });
 
-      if (local.length > 0) {
-        const delivered = local.filter((p) => p.status === "Delivered").length;
-        const cancelled = local.filter((p) => p.status === "Returned" || p.status === "Cancelled").length;
-        const ratio = local.length > 0 ? Math.round((delivered / local.length) * 1000) / 10 : 100;
-        return { provider, totalParcels: local.length, delivered, cancelled, deliveryRatio: ratio };
-      }
+      const localDelivered = local.filter((p) => p.status === "Delivered").length;
+      const localCancelled = local.filter((p) => p.status === "Returned" || p.status === "Cancelled").length;
+
+      let liveTotal = 0;
+      let liveDelivered = 0;
+      let liveCancelled = 0;
+      let hasLive = false;
 
       if (provider.toLowerCase() === "steadfast") {
         const keys = await this.getCredentials(merchantId, "Steadfast");
         if (keys.apiKey && keys.secretKey) {
+          this.logger.log(`[Steadfast Live API] 🚀 Querying live fraud check endpoint for phone: ${phone}`);
           const res = await fetch(`https://portal.packzy.com/api/v1/fraud_check/${phone}`, {
             headers: { "Api-Key": keys.apiKey, "Secret-Key": keys.secretKey, "Content-Type": "application/json" },
           });
+
           if (res.ok) {
             const data = await res.json();
-            if (data?.status === 200 && data.total_parcels !== undefined) {
-              const total = Number(data.total_parcels) || 0;
-              const delivered = Number(data.total_delivered) || 0;
-              const cancelled = Number(data.total_cancelled) || 0;
-              const ratio = total > 0 ? Math.round((delivered / total) * 1000) / 10 : 0;
-              return { provider, totalParcels: total, delivered, cancelled, deliveryRatio: ratio };
+            this.logger.log(`[Steadfast Live API] 📦 Live Response (HTTP ${res.status}): ${JSON.stringify(data)}`);
+            if (data && (data.total_parcels !== undefined || data.status === 200)) {
+              liveTotal = Number(data.total_parcels) || 0;
+              liveDelivered = Number(data.total_delivered) || 0;
+              liveCancelled = Number(data.total_cancelled) || 0;
+              hasLive = true;
+              const liveRatio = liveTotal > 0 ? Math.round((liveDelivered / liveTotal) * 1000) / 10 : 100;
+              this.logger.log(`[Steadfast Live API] ✅ Parsed Live Stats: Total: ${liveTotal}, Delivered: ${liveDelivered}, Cancelled: ${liveCancelled}, Ratio: ${liveRatio}%`);
             }
+          } else {
+            const errText = await res.text().catch(() => "");
+            this.logger.warn(`[Steadfast Live API] ⚠️ Live check failed (HTTP ${res.status}): ${errText}`);
           }
+        } else {
+          this.logger.warn(`[Steadfast Live API] ⚠️ Steadfast API keys not configured. Skipping live network check.`);
         }
       }
+
+      const total = hasLive ? Math.max(liveTotal, local.length) : local.length;
+      const delivered = hasLive ? Math.max(liveDelivered, localDelivered) : localDelivered;
+      const cancelled = hasLive ? Math.max(liveCancelled, localCancelled) : localCancelled;
+      const ratio = total > 0 ? Math.round((delivered / total) * 1000) / 10 : 100;
+
+      return { provider, totalParcels: total, delivered, cancelled, deliveryRatio: ratio };
     } catch (e) {
-      this.logger.debug(`Stats check skipped for ${provider}: ${e instanceof Error ? e.message : e}`);
+      this.logger.error(`[Courier API] ❌ Error checking ${provider} for phone ${phone}: ${e instanceof Error ? e.message : e}`);
     }
     return { provider, totalParcels: 0, delivered: 0, cancelled: 0, deliveryRatio: 0 };
   }

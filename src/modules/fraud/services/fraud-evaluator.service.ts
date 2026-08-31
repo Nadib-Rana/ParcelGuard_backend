@@ -1,4 +1,4 @@
-﻿import { Injectable, Logger } from "@nestjs/common";
+import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../../../database/prisma.service";
 import { CheckPhoneRiskDto } from "../dto/fraud.dto";
 import { RiskLevel } from "../../../common/enums";
@@ -32,6 +32,9 @@ export class FraudEvaluatorService {
     const rawPhone = dto.phone.trim();
     const cleanPhone = this.normalizePhone(rawPhone);
     const customerName = dto.name?.trim() || "Customer";
+
+    this.logger.log(`[FraudEvaluator] 🔍 Evaluating fraud risk for: ${cleanPhone} (Raw: ${rawPhone}, Merchant: ${merchantId || "Public"})`);
+
     const [velocity, courierData] = await Promise.all([
       this.calculateVelocity(rawPhone, cleanPhone),
       this.courierApi.fetchCourierLiveStats(cleanPhone, merchantId),
@@ -42,6 +45,7 @@ export class FraudEvaluatorService {
       where: { OR: [{ phone: cleanPhone }, { phone: rawPhone }] },
     });
     if (blacklistHit) {
+      this.logger.warn(`[FraudEvaluator] 🚨 Global Blacklist HIT for ${cleanPhone}: ${blacklistHit.reason}`);
       const result = this.buildBlacklistResult(cleanPhone, customerName, blacklistHit, velocity, courierData?.breakdown);
       await this.saveCheckLog(merchantId, result);
       return result;
@@ -49,6 +53,7 @@ export class FraudEvaluatorService {
 
     // 2. Multi-Courier Live Aggregator
     if (courierData && courierData.combined.totalParcels > 0) {
+      this.logger.log(`[FraudEvaluator] 📊 Multi-Courier Live Data Found: Total ${courierData.combined.totalParcels} orders, Delivered: ${courierData.combined.delivered}, Cancelled: ${courierData.combined.cancelled} (${courierData.combined.deliveryRatio}%)`);
       const result = this.applyVelocity(this.courierApi.buildCourierResult(cleanPhone, customerName, courierData.combined, courierData.breakdown), velocity);
       await this.saveCheckLog(merchantId, result);
       return result;

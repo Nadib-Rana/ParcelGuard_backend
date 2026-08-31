@@ -1,4 +1,4 @@
-﻿import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import * as dotenv from "dotenv";
@@ -84,37 +84,7 @@ async function main() {
     },
   });
 
-  // 3. Seed 30 orders for 01911391441 (28 Delivered, 2 Cancelled via RedX)
-  const elitePhone = "01911391441";
-  for (let i = 1; i <= 30; i++) {
-    const isDelivered = i <= 28;
-    await prisma.parcel.upsert({
-      where: { trackingId: `PG-ELITE-${i}` },
-      update: {},
-      create: {
-        trackingId: `PG-ELITE-${i}`,
-        consignmentId: `RX-ELITE-${i}`,
-        merchantId: merchantProfile.id,
-        recipientName: "Customer 01911391441",
-        recipientPhone: elitePhone,
-        recipientAddress: "Gulshan-2, Dhaka",
-        district: "Dhaka",
-        area: "Gulshan",
-        productTitle: `Order Item ${i}`,
-        category: "Electronics",
-        weightKg: 1.0,
-        courier: "RedX",
-        codAmount: 2500,
-        deliveryCharge: 120,
-        status: isDelivered ? ParcelStatus.DELIVERED : ParcelStatus.CANCELLED,
-        riskLevel: RiskLevel.SAFE,
-        riskScore: 8,
-        dateStr: "15 Aug 2026",
-      },
-    });
-  }
-
-  // 4. Seed Global Blacklist
+  // 3. Seed Global Blacklist
   const blacklistEntries = [
     { phone: "01799887766", customerName: "Rafiqul Islam", riskScore: 95, reportedByCount: 8, totalReturns: 14, reason: "Serial parcel rejector across multiple e-commerce merchants in Bogra.", status: BlacklistStatus.CONFIRMED_FRAUD, addedBy: "Super Admin" },
     { phone: "01811223344", customerName: "Monir Hossain", riskScore: 88, reportedByCount: 5, totalReturns: 9, reason: "Provides fake address in Gazipur, switches off phone when courier calls.", status: BlacklistStatus.CONFIRMED_FRAUD, addedBy: "Super Admin" },
@@ -129,7 +99,7 @@ async function main() {
     });
   }
 
-  console.log("Database seeded successfully with 30 orders for 01911391441!");
+  console.log("Database seeded successfully!");
 }
 
 main()
