@@ -30,6 +30,7 @@ import { SettlementsModule } from "./modules/settlements/settlements.module";
 import { BillingModule } from "./modules/billing/billing.module";
 import { AdminModule } from "./modules/admin/admin.module";
 import { NotificationsModule } from "./modules/notifications/notifications.module";
+import { AnalyticsModule } from "./modules/analytics/analytics.module";
 import { StorageModule } from "./modules/storage/storage.module";
 import { MailModule } from "./modules/mail/mail.module";
 import { HealthModule } from "./modules/health/health.module";
@@ -79,6 +80,7 @@ import { AppService } from "./app.service";
     BillingModule,
     AdminModule,
     NotificationsModule,
+    AnalyticsModule,
     HealthModule,
     PostsModule,
   ],
